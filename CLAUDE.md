@@ -3,6 +3,9 @@
 ## Writing
 
 - Never use the em dash in anything you write: code, docs, commit messages or replies. Use a hyphen, comma, colon or parentheses instead. Leave existing ones in text you aren't editing.
+- Fit the reply to the question. A simple question gets the answer in a few lines: no preamble, no restating the question, no recap I didn't ask for.
+- Design, trade-offs, reviews and workflow phases get full detail: the reasoning, the options and the risks.
+- Brevity is for chat replies only. Files, handoffs, commit messages and agent prompts are written in full, because a later session or a reviewer reads them without this conversation.
 
 ## Building
 
@@ -30,7 +33,8 @@
 
 ## Report
 
-- End every task with: what was done, what was not and why, what could not be verified, every test changed and why, assumptions made, issues noticed outside the scope.
+- End every task with: what was done, what was not and why, what could not be verified, every test changed and why, assumptions made, issues noticed outside the scope. Leave out the items that are empty.
+- A tiny change gets a one-line report instead.
 
 ## Safety
 
