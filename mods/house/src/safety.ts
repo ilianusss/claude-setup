@@ -52,15 +52,6 @@ const git: Check = args => {
       return rest.includes('--hard') ? DISCARDS : undefined
     case 'clean':
       return flags.includes('n') || rest.includes('--dry-run') ? undefined : 'deletes untracked files'
-    case 'checkout':
-    case 'switch':
-      return 'switches branches or discards changes'
-    case 'restore': {
-      const onlyStaged = (rest.includes('--staged') || flags.includes('S')) && !rest.includes('--worktree') && !flags.includes('W')
-      return onlyStaged ? undefined : DISCARDS
-    }
-    case 'stash':
-      return rest[0] === 'list' || rest[0] === 'show' ? undefined : 'moves uncommitted work into a stash'
     case 'branch': {
       const isDelete = flags.includes('d') || rest.includes('--delete')
       const isForced = flags.includes('D') || flags.includes('f') || rest.includes('--force')

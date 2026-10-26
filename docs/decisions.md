@@ -44,3 +44,7 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 ## 2026-10-22: model and effort stay out of the repo
 
 - **A git clean filter strips `model`, `effortLevel` and `modelSettings` from `settings.json`**: `/model` rewrites them in the user file, which has no `.local` variant, so they made every session leave a diff. Git cannot ignore single lines, and `skip-worktree` would hide real edits to the file.
+
+## 2026-10-26: house stops asking for checkout, switch, restore and stash
+
+- **`git checkout`, `git switch`, `git restore` and `git stash` no longer ask**: they asked on every branch switch and every stash, too often for the risk. The CLAUDE.md Safety section still asks Claude to check before discarding uncommitted work; `reset --hard`, `clean` and `branch -D` keep the ask.
