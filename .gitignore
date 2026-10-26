@@ -6,6 +6,7 @@
 !/.gitignore
 !/.gitattributes
 !/.gitmodules
+!/.github/
 !/CLAUDE.md
 !/settings.json
 !/rules/
