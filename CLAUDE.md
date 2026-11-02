@@ -19,6 +19,7 @@
 
 - Tiny changes (typo, config value, dependency bump): just do it, no test, say so.
 - Any behaviour change in a repo with a test setup follows the `writing-tests-first` skill. A bug fix always starts with a failing test that reproduces it. No test setup: ask before adding one.
+- Never weaken a test or change an expectation to match what the code returns. If a test looks wrong, show why with evidence and ask before changing it.
 - Non-trivial changes (several files, a design choice, or more than one PR worth): a short plan and my go-ahead before writing code, or suggest `/workflow new`.
 - Scratch files and scripts go in the session scratchpad, never in the repo.
 
@@ -29,7 +30,7 @@
 ## Verification
 
 - Before saying a task is done, run the project's lint, typecheck and tests (commands in the project CLAUDE.md or `.claude/workflow.json`). Never ignore a failure or a flaky test: fix it if your change caused it, report it if not.
-- Exercise the real thing when possible: the route against the running app, the screen in a browser.
+- Exercise the real thing when possible: the route against the running app, the screen in a browser at mobile and desktop widths (alignment, overflow, focus and hover states, dark mode, keyboard use).
 
 ## Report
 

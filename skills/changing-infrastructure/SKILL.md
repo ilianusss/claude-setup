@@ -32,7 +32,7 @@ Then summarize the change in a few lines: what is created, changed and destroyed
 
 ## 3. Ask before shared or production state
 
-`terraform apply`, `destroy`, `import`, `state`; `kubectl apply`, `delete`, `edit`, `patch`, `scale`, `rollout`; `helm install`, `upgrade`, `uninstall`, `rollback`; a deploy; a migration against a non-local database. Show the summary from step 2 with the question. Settings already make these commands ask; the summary is what makes the answer informed.
+`terraform apply`, `destroy`, `import`, `state`; `kubectl apply`, `delete`, `edit`, `patch`, `scale`, `rollout`; `helm install`, `upgrade`, `uninstall`, `rollback`; a deploy; a migration against a non-local database. Show the summary from step 2 with the question. `warden` already makes these commands ask; the summary is what makes the answer informed.
 
 ## 4. Keep secrets out
 
@@ -50,4 +50,7 @@ Every change says how to undo it before it runs: the previous Helm revision, the
 
 ## Writing the files
 
-The `infra` rule covers how images, CI workflows, manifests and Terraform are written: pinned versions, non-root containers, least-privilege CI tokens, requests and limits, no hardcoded credentials.
+- **Images:** pinned versions, a digest for production. A non-root user, multi-stage builds, lockfile installs (`npm ci`, `uv sync --frozen`). No secrets in layers or build arguments.
+- **CI:** actions pinned to a commit SHA, least-privilege `permissions` on every workflow.
+- **Kubernetes:** requests and limits, readiness and liveness probes, a `securityContext` (non-root, read-only root filesystem where possible). Never the `latest` tag.
+- **Terraform:** remote state with locking, no hardcoded credentials, variables for anything that differs between environments.
