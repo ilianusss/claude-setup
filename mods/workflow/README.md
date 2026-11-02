@@ -4,7 +4,7 @@ A Claude Code mod that runs a project from idea to pull request with one command
 
 ## Role in the system
 
-It is one of the two mods of the `~/.claude` setup, next to `house`, loaded through `CLAUDE_CODE_PLUGIN_DIRS` in its `settings.json`. The knowledge it relies on (`writing-tests-first`, `writing-clean-code`, `writing-secure-code`, `following-git-conventions`) and the `reviewer` agent live in that setup; without them the phases still run, with less guidance.
+It is one of the two mods of the `~/.claude` setup, next to `warden`, loaded through `CLAUDE_CODE_PLUGIN_DIRS` in its `settings.json`. The knowledge it relies on (`writing-tests-first`, `writing-clean-code`, `writing-secure-code`, `following-git-conventions`) and the `reviewer` agent live in that setup; without them the phases still run, with less guidance.
 
 ## Prerequisites
 

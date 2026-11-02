@@ -131,7 +131,7 @@ export function registerIntegrity(on: On): void {
     const findings = findingsFor(file, before, after)
     if (findings.length === 0) return ran
     for (const finding of findings) session.reported.add(`${file}: ${finding}`)
-    return { ...ran, context: [...(ran.context ?? []), `house: ${file}: ${findings.join(', ')}. ${RULE}`] }
+    return { ...ran, context: [...(ran.context ?? []), `warden: ${file}: ${findings.join(', ')}. ${RULE}`] }
   }
 
   on('session.start', async ($, e, next) => {
@@ -169,7 +169,7 @@ export function registerIntegrity(on: On): void {
       }
     }
     if (fresh.length > 0) {
-      const text = ['house: test files changed through the shell this turn:', ...fresh.map(key => `- ${key}`), RULE].join('\n')
+      const text = ['warden: test files changed through the shell this turn:', ...fresh.map(key => `- ${key}`), RULE].join('\n')
       $.clock.after(0, () => void $.prompt.submit({ text }))
     }
     return completed

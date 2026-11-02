@@ -11,7 +11,7 @@ Ask in plain words ("add a rule that...", "the workflow should also..."). The `c
 | You want | Put it in |
 | --- | --- |
 | Something that must hold no matter what | A permission or sandbox entry in `settings.json` |
-| A guard or behaviour that needs logic or state | A mod: `mods/house` (every session) or `mods/workflow` |
+| A guard or behaviour that needs logic or state | A mod: `mods/warden` (every session) or `mods/workflow` |
 | An independent review in a fresh context | An agent in `agents/` |
 | Knowledge or a procedure Claude picks up on its own | A skill in `skills/` |
 | Guidance for one kind of file | A rule in `rules/` with `paths` |
@@ -33,7 +33,7 @@ A mod's tests run against Claude Code's own engine, which also enforces how a mo
 Before committing a change to a mod, run both mods' tests:
 
 ```sh
-claude plugin test ~/.claude/mods/house && claude plugin test ~/.claude/mods/workflow
+claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow
 ```
 
 ## Reloading

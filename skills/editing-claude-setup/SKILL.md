@@ -14,7 +14,7 @@ Pick the first row that fits:
 | The instruction | Goes in | Why |
 | --- | --- | --- |
 | Must hold even if everything else fails (never read secrets, ask before push) | A permission or sandbox entry in `settings.json` | Enforced by Claude Code itself |
-| Needs logic, state, or a guard that depends on state | A mod: `mods/house` if it applies to every session, `mods/workflow` if it is about workflows | Code, zero context cost |
+| Needs logic, state, or a guard that depends on state | A mod: `mods/warden` if it applies to every session, `mods/workflow` if it is about workflows | Code, zero context cost |
 | Needs a fresh context (an independent review) | An agent in `agents/` | Its own context window |
 | A manual command with no logic | A skill with `disable-model-invocation: true` | No context cost until typed |
 | A procedure or knowledge Claude should pick up on its own | A skill in `skills/` | Description always loaded, body on demand |
@@ -30,7 +30,7 @@ Keep an instruction only if it changes behaviour: the test is "would Claude do t
 - A skill description starts with what it covers and the phrases that should trigger it, in under ~400 characters. Everything else goes in the body.
 - Explain why a rule exists instead of writing it in capitals.
 - References sit one level deep, linked from the body with when to read them.
-- No em dash anywhere (the `house` mod refuses them).
+- No em dash anywhere (the `warden` mod refuses them).
 - A user rule and a project rule do not override each other: Claude "may follow either". A project rule extends, never contradicts.
 
 ## Gotchas measured on this machine
@@ -40,7 +40,7 @@ Keep an instruction only if it changes behaviour: the test is "would Claude do t
 - **A mod command cannot run another command from its own hook.** Answer first, then run it from `$.clock.after`.
 - **`tool.call` sees a Bash command before `rtk`, `tool.check` after it.** Match both forms.
 - **The engine refuses to load a mod** whose hook is not a function literal (or a function's name), that registers two hooks on one event without a matcher, that puts `$` in an object, or that passes `$` to anything but a top-level function, declared or imported. `claude plugin test` reports "hooks module did not load" with the line.
-- **`house` refuses a literal em dash in a Write**, mod sources included: build it with `String.fromCharCode(0x2014)`.
+- **`warden` refuses a literal em dash in a Write**, mod sources included: build it with `String.fromCharCode(0x2014)`.
 
 ## Mods
 
@@ -65,4 +65,4 @@ Keep an instruction only if it changes behaviour: the test is "would Claude do t
 2. Add a dated line to `docs/decisions.md` when the change is a decision someone could later question.
 3. Rules, skills, agents and CLAUDE.md are read by new sessions; mods reload when their files change; `settings.json` changes apply to the running session for most keys.
 4. A change to the workflow mod is committed in its repo, then the submodule pointer is committed in `~/.claude`.
-5. Commit only when asked, following `following-git-conventions`. Scopes: `claude-md`, `settings`, `rules`, `skills`, `agents`, `house`, `workflow`, `docs`.
+5. Commit only when asked, following `following-git-conventions`. Scopes: `claude-md`, `settings`, `rules`, `skills`, `agents`, `warden`, `workflow`, `docs`.

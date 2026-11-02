@@ -21,7 +21,7 @@ How this setup is built, and why each instruction lives where it does. For using
 | `rules/*.md` with `paths` | When Claude reads or edits a matching file | Only when relevant | Guidance for one kind of file |
 | `skills/*` | Description always, body when relevant | About 400 characters each | Knowledge and procedures |
 | `agents/reviewer.md` | When spawned | A cold start each time | The fresh-context review, once per feature |
-| `mods/house`, `mods/workflow` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
+| `mods/warden`, `mods/workflow` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
 | Permissions and sandbox (`settings.json`) | Never in context | Zero | Hard limits that hold even if a mod fails |
 
 ## File map
@@ -33,7 +33,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── rules/                 code, tests, typescript, frontend, infra, claude-setup
 ├── skills/                9 knowledge skills
 ├── agents/reviewer.md
-├── mods/house/            every session: em dashes, safety asks, test integrity
+├── mods/warden/            every session: em dashes, safety asks, test integrity
 ├── mods/workflow/         /workflow: phases, the test lock, gates
 └── docs/
 ```
@@ -45,9 +45,9 @@ Everything else in `~/.claude` is Claude Code's runtime data, kept out of git by
 | What must hold | Prose | Enforced by |
 | --- | --- | --- |
 | No secret is read | CLAUDE.md, Safety | `Read` deny rules, which the sandbox also applies to shell reads |
-| Nothing is pushed, deployed or discarded without asking | CLAUDE.md, Safety | `house` asks for the risky commands and for anything run outside the sandbox. No settings rule backs it: `settings.json` holds no `ask` or `allow` rules, so the rest is on the prose |
-| No em dash | CLAUDE.md, Writing | `house`: refuses edits, notebook cells, commit messages and GitHub text that add one; rewrites replies |
-| No weakened test | `rules/tests.md`, `writing-tests-first` | `house`: a note on each test edit, a follow-up at the end of a turn for shell changes |
+| Nothing is pushed, deployed or discarded without asking | CLAUDE.md, Safety | `warden` asks for the risky commands and for anything run outside the sandbox. No settings rule backs it: `settings.json` holds no `ask` or `allow` rules, so the rest is on the prose |
+| No em dash | CLAUDE.md, Writing | `warden`: refuses edits, notebook cells, commit messages and GitHub text that add one; rewrites replies |
+| No weakened test | `rules/tests.md`, `writing-tests-first` | `warden`: a note on each test edit, a follow-up at the end of a turn for shell changes |
 | Tests stay apart from the implementation | `writing-tests-first`, the build phase | `workflow`: the test lock |
 | A phase stays in its lane | Phase instructions | `workflow`: each phase's write scope |
 | Gates and unlocks are the user's | Phase instructions | `workflow`: `$.ui.ask` dialogs only a person can answer |
@@ -69,7 +69,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 
 Both are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
 
-**house** applies to every session:
+**warden** applies to every session:
 
 - typography: refuses a Write, Edit or notebook cell that adds an em dash, and a commit message or GitHub body that holds one; rewrites em dashes in Claude's replies to a spaced hyphen before they are stored;
 - safety asks: a person-only ask for a built-in list of risky commands (push, discards, infra changes, publishes), matched with or without `rtk`, in any segment of a compound command, in forms prefix rules miss (`git -C dir push`), and for any command Claude wants to run outside the sandbox;

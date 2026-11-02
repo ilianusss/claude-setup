@@ -48,11 +48,11 @@ async function readOrEmpty($: EngineInterface, path: string): Promise<string> {
 }
 
 function refusal(added: number): { deny: string } {
-  return { deny: `house: this adds ${added} em dash${added === 1 ? '' : 'es'}. ${ADVICE}` }
+  return { deny: `warden: this adds ${added} em dash${added === 1 ? '' : 'es'}. ${ADVICE}` }
 }
 
 function checkFailed(what: string): { deny: string } {
-  return { deny: `house: the em dash check on ${what} failed, so the call is refused.` }
+  return { deny: `warden: the em dash check on ${what} failed, so the call is refused.` }
 }
 
 export function registerTypography(on: On): void {

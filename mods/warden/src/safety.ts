@@ -140,6 +140,6 @@ export function registerSafety(on: On): void {
     if (verdict.decision === 'deny') return verdict
     const input = (e.input ?? {}) as { command?: unknown; dangerouslyDisableSandbox?: unknown }
     const reason = riskyReason(typeof input.command === 'string' ? input.command : '', input.dangerouslyDisableSandbox === true)
-    return reason === undefined ? verdict : { decision: 'ask', reason: `house: ${reason}. Approve only if you asked for it.` }
-  }).catch(() => ({ decision: 'ask', reason: 'house: the safety check failed. Approve only if you asked for this command.' }))
+    return reason === undefined ? verdict : { decision: 'ask', reason: `warden: ${reason}. Approve only if you asked for it.` }
+  }).catch(() => ({ decision: 'ask', reason: 'warden: the safety check failed. Approve only if you asked for this command.' }))
 }
