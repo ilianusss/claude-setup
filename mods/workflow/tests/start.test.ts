@@ -110,6 +110,17 @@ describe('status', () => {
     expect(ran.text).toContain(`${ROOT}: add-login (design)`)
   })
 
+  test('/workflow all drops the workflows of a repo that no longer exists', async ($, on) => {
+    const fake = fakeEngine(on, WITH_CONFIG)
+    fake.answers.push(SIZE.feature, COMMITS.no, BRANCH.stay('main'))
+    await start($)
+    await run($, 'new Add login')
+    for (const path of [...fake.files.keys()]) if (path.startsWith(`${ROOT}/`)) fake.files.delete(path)
+
+    const ran = await run($, 'all')
+
+    expect(ran.text).toBe('no open workflow anywhere.')
+  })
 })
 
 describe('command replies', () => {
