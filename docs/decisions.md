@@ -49,6 +49,37 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 
 - **`git checkout`, `git switch`, `git restore` and `git stash` no longer ask**: they asked on every branch switch and every stash, too often for the risk. The CLAUDE.md Safety section still asks Claude to check before discarding uncommitted work; `reset --hard`, `clean` and `branch -D` keep the ask.
 
-## 2026-11-02: the workflow mod lives in this repo
+## 2026-10-30: `/safety` lifts the infra and publish asks for one session
 
-- **Not in a submodule**: one person uses it, and every change cost a commit and a push in two repos. The `ilianusss/claude-workflow` repo and its Desktop clone are no longer used, and the mod's marketplace file is gone: it loads from its folder through `CLAUDE_CODE_PLUGIN_DIRS`.
+- **`/safety` toggles off the house asks for terraform, tofu, kubectl, helm, docker and package publishes**: devops sessions hit them on every apply. Git discards, `rm -rf`, gh, `dropdb` and secrets outside the sandbox keep asking, because none of them is routine devops work.
+- **It lasts for the session and is obeyed only when typed at the prompt**: a forgotten toggle cannot leak into the next session, and neither Claude nor another plugin can lift a guard meant to hold against them.
+
+## 2026-11-02: model and effort are picked per task
+
+- **The `choosing-model-and-effort` skill maps each kind of task to a model and an effort, and every Agent call passes both**: on the Pro plan the main session and every subagent share one usage window, and a subagent without an explicit pick inherits Opus at the session's effort, while built-in Explore runs on Opus on a subscription whatever the session runs.
+- **Fable and `max` effort are never used, and `xhigh` only when the skill's conditions hold**: Fable can bill to usage credits on Pro, and Anthropic warns that `max` gives diminishing returns and overthinks.
+
+## 2026-11-02: house covers what the sandbox covered
+
+- **`rm -rf` and any shell command that names a secret file ask in every session**: with the sandbox off since 2026-10-26, the `Read` deny rules no longer bind shell commands and nothing contains `rm -rf`, and both asks fired only outside the sandbox, so they never fired. The secret match now needs a file name (`.env.example`, `process.env` and `jq '.key'` stay quiet), because it runs on every command.
+- **`env`, `bash -c`, `sh -c` and `zsh -c` are unwrapped**: a wrapper no longer hides a risky command from the checks.
+- **Force pushes ask**: CLAUDE.md forbids force-pushing unless the user names it. A plain `git push` still never asks.
+- **`rules/tests.md` became one CLAUDE.md line**: in auto mode Claude reads and edits mostly through Bash, which never loads path rules, and the audit saw "do not change a wrong expectation, ask" hold in 1 of 4 runs. Its other lines already live in `writing-tests-first`.
+- **The Figma plugin is disabled and `aws-mcp` removed**: about 2.4k tokens of always-on context nobody used, and a server that failed to connect in every session.
+
+## 2026-11-02: one repo, warden, checks on the outcome
+
+- **`house` is renamed `warden`**: the name says what it does. Folder, manifest, messages, state key and status line follow.
+- **The workflow mod lives in this repo, not in a submodule**: one person uses it, and every change cost a commit and a push in two repos. The `ilianusss/claude-workflow` repo and its Desktop clone are no longer used.
+- **`/safety` also lifts force pushes**: they are routine when rewriting a feature branch. Each check now says whether `/safety` may lift it, instead of a list of programs.
+- **Command replies leave the prefix to Claude Code**: it already shows `workflow:` before a command's output, so the mods' own prefix printed twice.
+- **Shell writes are checked on the outcome, with notes rather than refusals**: in auto mode Claude edits mostly through Bash, which the Edit and Write guards never see. warden compares the em dashes in the git diff and the untracked files at the start and end of each turn; the workflow diffs the working tree around each shell command in a phase with a write scope. The command has already run, so both leave a note instead of undoing anything.
+- **The build prompt names the test command and the checks**: Claude used to spend one refused `lock` call per slice to learn them. The build phase also checks each acceptance criterion against the design before writing tests, because Sonnet copied a wrong one into a locked test.
+- **Plan mode for changes that fit one session, `/workflow` for several slices**: plan mode enforces the approval that CLAUDE.md used to ask for in prose.
+- **warden has an eval suite, the rest uses the audit harness**: `claude plugin eval` runs each case with and without the plugin, which fits warden. CLAUDE.md and the skills are not a plugin, and the workflow starts from a slash command that headless runs can drop, so they rerun through `~/.claude/audit/harness/regress.sh`.
+
+## 2026-11-02: no path-scoped rules
+
+- **`rules/` is gone**: a rule loads only when Claude's Read, Edit or Write tools touch a matching file, and in auto mode Claude mostly reads and edits through Bash, so the rules rarely loaded. What they held that nothing else did moved: the infrastructure file conventions into `changing-infrastructure`, the two TypeScript lines (floating promises, `import type`) into `writing-clean-code`, and the UI check (mobile and desktop widths, focus, overflow, dark mode, keyboard) into the CLAUDE.md verification line. The rest already lived in `writing-clean-code`, `writing-secure-code` and `editing-claude-setup`.
+- **`changing-database-schema` lost its `paths`**: a path-scoped skill is offered only when Claude's tools touch a matching file, like a rule, so it now triggers on its description like the other skills (about 90 tokens per request).
+- **The workflow mod declares its own tools in `types/index.d.ts`**: the generated MCP types come from the session that last saved the mod, and a session outside a workflow repo never registers them, so every edit from `~/.claude` broke the type-check.

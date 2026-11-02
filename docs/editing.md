@@ -4,17 +4,16 @@ How to change this setup, by hand or with Claude.
 
 ## With Claude
 
-Ask in plain words ("add a rule that...", "the workflow should also..."). The `claude-setup` rule loads the `editing-claude-setup` skill whenever Claude touches a setup file, and the skill decides where the instruction goes, applies the house style and says how to test it. Run the session from `~/.claude` so the paths match.
+Ask in plain words ("add a rule that...", "the workflow should also..."). The `editing-claude-setup` skill loads when you ask for such a change; it decides where the instruction goes, applies the house style and says how to test it. Run the session from `~/.claude` so the paths match.
 
 ## Where things go
 
 | You want | Put it in |
 | --- | --- |
-| Something that must hold no matter what | A permission or sandbox entry in `settings.json` |
+| Something that must hold no matter what | A permission in `settings.json`, or a `warden` guard when it concerns shell commands |
 | A guard or behaviour that needs logic or state | A mod: `mods/warden` (every session) or `mods/workflow` |
 | An independent review in a fresh context | An agent in `agents/` |
 | Knowledge or a procedure Claude picks up on its own | A skill in `skills/` |
-| Guidance for one kind of file | A rule in `rules/` with `paths` |
 | Something true in every session | `CLAUDE.md` (keep it short: it is loaded every time) |
 | Something about one project | That project's `CLAUDE.md` or `.claude/` |
 
@@ -27,6 +26,8 @@ Every Bash permission rule is written twice, plain and with `rtk ` in front, bec
 | A mod | `claude plugin validate mods/<name>` and `claude plugin test mods/<name>` |
 | `settings.json` | `claude -p --model haiku --settings ~/.claude/settings.json "Reply OK"` from any scratch folder |
 | A skill | The `skill-creator` skill's evals |
+| warden's behaviour with a real model | `claude plugin eval mods/warden --trust-plugin --allow-tools Bash Write Read`: each case also runs without warden and reports the difference |
+| CLAUDE.md, the skills, the workflow's behaviour | `~/.claude/audit/harness/regress.sh`: reruns the audit tasks on Sonnet and prints them beside the audit baseline (about $0.15 a run) |
 
 A mod's tests run against Claude Code's own engine, which also enforces how a mod is written: hooks are function literals, one hook per event without a matcher, and `$` only ever passed straight to a top-level function. A module that breaks one of these does not load, and the test output names the line.
 
@@ -59,4 +60,4 @@ The mod API is early access and may change. After an update:
 
 1. Run both mods' tests (above).
 2. Start a session in a repo with a workflow: the status line shows `workflow: <slug>` and `/workflow` lists it.
-3. If a mod is broken, turn mods off by removing `CLAUDE_CODE_PLUGIN_DIRS` from `settings.json`. The permissions, rules and skills keep working. Workflows continue by hand: tell Claude "read `.git/claude-workflow/<slug>.md` and `~/.claude/mods/workflow/phases/<phase>.md`, then continue". The test lock and the gates are off until the mod is fixed.
+3. If a mod is broken, turn mods off by removing `CLAUDE_CODE_PLUGIN_DIRS` from `settings.json`. The permissions, CLAUDE.md and skills keep working. Workflows continue by hand: tell Claude "read `.git/claude-workflow/<slug>.md` and `~/.claude/mods/workflow/phases/<phase>.md`, then continue". The test lock and the gates are off until the mod is fixed.
