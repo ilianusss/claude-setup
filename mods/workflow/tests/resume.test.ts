@@ -23,6 +23,17 @@ describe('/workflow continue', () => {
     expect(fake.prompts[0]).toContain('Write slice 1 tests.')
   })
 
+  test('a build step names the slice test command and the checks verify waits for', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo(), 'feat/login')
+    await start($)
+
+    await run($, 'continue')
+    await fake.clock.settle()
+
+    expect(fake.prompts[0]).toContain('`pnpm vitest run {files}`')
+    expect(fake.prompts[0]).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
+  })
+
   test('offers to switch to the workflow branch', async ($, on) => {
     const fake = fakeEngine(on, buildRepo(), 'main')
     fake.answers.push(SWITCH.yes('feat/login'))

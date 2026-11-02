@@ -44,7 +44,14 @@ async function readIndex($: EngineInterface): Promise<Record<string, IndexEntry>
 }
 
 export async function openWorkflowsEverywhere($: EngineInterface): Promise<IndexEntry[]> {
-  return Object.values(await readIndex($)).sort((a, b) => b.updated.localeCompare(a.updated))
+  const index = await readIndex($)
+  const gone = []
+  for (const [key, entry] of Object.entries(index)) if (!(await $.fs.exists(entry.root))) gone.push(key)
+  if (gone.length > 0) {
+    for (const key of gone) delete index[key]
+    await $.store.set(INDEX_KEY, index)
+  }
+  return Object.values(index).sort((a, b) => b.updated.localeCompare(a.updated))
 }
 
 export async function saveWorkflow($: EngineInterface, repo: Repo, paths: Paths, workflow: Workflow): Promise<void> {

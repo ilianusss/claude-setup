@@ -37,6 +37,8 @@ export type Fake = {
   answers: string[]
   questions: string[]
   bash: Map<string, number>
+  shellWrites: Map<string, Record<string, string>>
+  trees: Map<string, Map<string, string>>
   clock: MockClock
 }
 
@@ -59,7 +61,17 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
   if (line === 'rev-parse --path-format=absolute --show-toplevel --git-common-dir') return ok(`${ROOT}\n${ROOT}/.git\n`)
   if (line === 'symbolic-ref --quiet --short HEAD') return ok(`${fake.branch}\n`)
   if (line === 'add -A') return ok('')
-  if (line === 'write-tree') return ok(`${fnv(workingFiles(fake).map(path => `${path}:${fake.files.get(`${ROOT}/${path}`)}`).join('\n'))}\n`)
+  if (line === 'write-tree') {
+    const snapshot = new Map(workingFiles(fake).map(path => [path, fake.files.get(`${ROOT}/${path}`) ?? '']))
+    const hash = fnv([...snapshot].map(([path, text]) => `${path}:${text}`).join('\n'))
+    fake.trees.set(hash, snapshot)
+    return ok(`${hash}\n`)
+  }
+  if (args[0] === 'diff-tree') {
+    const [before, after] = [fake.trees.get(args[3] ?? '') ?? new Map<string, string>(), fake.trees.get(args[4] ?? '') ?? new Map<string, string>()]
+    const paths = [...new Set([...before.keys(), ...after.keys()])].filter(path => before.get(path) !== after.get(path))
+    return ok(paths.sort().join('\n'))
+  }
   if (line === 'diff --name-only HEAD') {
     return ok(workingFiles(fake).filter(path => fake.committed.has(path) && fake.committed.get(path) !== fake.files.get(`${ROOT}/${path}`)).join('\n'))
   }
@@ -110,6 +122,8 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     answers: [],
     questions: [],
     bash: new Map(),
+    shellWrites: new Map(),
+    trees: new Map(),
     clock: mock.clock(on, { now: NOW }),
   }
   mock.store(on)
@@ -148,6 +162,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     }
     if (e.tool === 'Write') fake.files.set(String(input.file_path), String(input.content))
     if (e.tool === 'Bash') {
+      for (const [path, text] of Object.entries(fake.shellWrites.get(String(input.command)) ?? {})) fake.files.set(`${ROOT}/${path}`, text)
       const exitCode = fake.bash.get(String(input.command)) ?? 0
       return exitCode === 0
         ? { result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }
