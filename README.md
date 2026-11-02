@@ -4,12 +4,12 @@ A Claude Code setup for fullstack and devops work; this repo is `~/.claude` itse
 
 ## Role in the system
 
-The setup loads two mods: `house`, kept here, and `workflow`, a git submodule pointing at [claude-workflow](https://github.com/ilianusss/claude-workflow), which can also be installed on its own as a plugin.
+The setup loads two mods, both kept here: `house`, which guards every session, and `workflow`, which runs project workflows. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
 
 ## Prerequisites
 
 - Claude Code 2.1.308 or later (the mods use an early-access API).
-- git, with access to both repos.
+- git, with access to the repo.
 - [rtk](https://github.com/rtk-ai/rtk), which the Bash hook calls.
 
 ## Getting started
@@ -17,21 +17,21 @@ The setup loads two mods: `house`, kept here, and `workflow`, a git submodule po
 On a new machine:
 
 ```sh
-git clone --recurse-submodules git@github.com:ilianusss/.claude.git ~/.claude
+git clone git@github.com:ilianusss/.claude.git ~/.claude
 ```
 
 On a machine that already has a `~/.claude`, quit every Claude Code session, then replace the folder and bring back the runtime data (memory, transcripts, history, plugins, themes):
 
 ```sh
 mv ~/.claude ~/.claude.old
-git clone --recurse-submodules git@github.com:ilianusss/.claude.git ~/.claude
+git clone git@github.com:ilianusss/.claude.git ~/.claude
 rsync -a --ignore-existing \
   --exclude /skills/ --exclude /CLAUDE.md --exclude /RTK.md \
   --exclude '/settings.json*' --exclude /dev-mods/ \
   ~/.claude.old/ ~/.claude/
 ```
 
-The clones use SSH so changes to the setup can be pushed back; the submodule follows the same protocol. Old skills are left behind on purpose. Keep `~/.claude.old` until a week of use shows nothing is missing. Then start a session in a repo and type `/workflow`: an answer means the mods loaded.
+The clone uses SSH so changes to the setup can be pushed back. Old skills are left behind on purpose. Keep `~/.claude.old` until a week of use shows nothing is missing. Then start a session in a repo and type `/workflow`: an answer means the mods loaded.
 
 ## Commands
 
@@ -46,7 +46,7 @@ rules/           guidance loaded when Claude touches a matching file
 skills/          knowledge Claude loads on demand
 agents/          the reviewer, run in a fresh context
 mods/house/      every session: em dashes, safety asks, weakened tests
-mods/workflow/   the /workflow mod (submodule)
+mods/workflow/   the /workflow mod
 docs/            how it works and how to change it
 ```
 

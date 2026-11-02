@@ -1,0 +1,15 @@
+{
+  "testGlobs": ["**/*.{test,spec}.{ts,tsx,js,jsx}", "**/__tests__/**", "e2e/**"],
+  "testConfig": ["vitest.config.ts", "playwright.config.ts"],
+  "commands": {
+    "test": "pnpm test",
+    "testFiles": "pnpm vitest run {files}",
+    "lint": "pnpm lint",
+    "typecheck": "pnpm tsc --noEmit",
+    "format": "pnpm prettier --check .",
+    "e2e": "pnpm playwright test"
+  },
+  "testLevel": "personal app, deployed",
+  "specsDir": "docs/specs",
+  "packages": []
+}

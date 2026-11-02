@@ -34,7 +34,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── skills/                9 knowledge skills
 ├── agents/reviewer.md
 ├── mods/house/            every session: em dashes, safety asks, test integrity
-├── mods/workflow/         submodule: ilianusss/claude-workflow
+├── mods/workflow/         /workflow: phases, the test lock, gates
 └── docs/
 ```
 
@@ -75,7 +75,7 @@ Both are TypeScript modules for the Claude Code mod API (early access: it may ch
 - safety asks: a person-only ask for a built-in list of risky commands (push, discards, infra changes, publishes), matched with or without `rtk`, in any segment of a compound command, in forms prefix rules miss (`git -C dir push`), and for any command Claude wants to run outside the sandbox;
 - test integrity: a note when an edit adds `.only` or a skip, removes or changes an assertion, or rewrites a snapshot; at the end of a turn, the same check on the git diff catches shell changes and queues one follow-up.
 
-**workflow** ([ilianusss/claude-workflow](https://github.com/ilianusss/claude-workflow)) runs project workflows:
+**workflow** runs project workflows:
 
 - the `/workflow` command, whose bookkeeping (status, lists, closing) costs no model turn;
 - the state in `<git common dir>/claude-workflow/`, uncommitted, shared by every worktree, written only by the mod;
