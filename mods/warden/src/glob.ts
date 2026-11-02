@@ -1,4 +1,4 @@
-// The workflow mod has its own copy: the two mods ship separately and share no code.
+// The workflow mod has its own copy: each mod loads on its own from its folder.
 
 const compiled = new Map<string, RegExp>()
 

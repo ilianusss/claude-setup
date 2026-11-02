@@ -1,3 +1,5 @@
+import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { engineBeneath } from './engine'
@@ -78,5 +80,82 @@ describe('replies', () => {
       uuid: 'u2',
     })
     expect(session.appended()[0]?.message.content).toEqual([{ type: 'text', text: `clean ${DASH} nothing to commit` }])
+  })
+})
+
+describe('files written through the shell', () => {
+  const TOPLEVEL = 'rev-parse --show-toplevel'
+  const DIFF = 'diff HEAD -U0 --no-color --no-ext-diff'
+  const UNTRACKED = 'ls-files --others --exclude-standard -z'
+
+  function addedLine(file: string, line: string): string {
+    return [`diff --git a/${file} b/${file}`, `--- a/${file}`, `+++ b/${file}`, '@@ -1,0 +2 @@', `+${line}`, ''].join('\n')
+  }
+
+  async function turn($: Engine, id: string, during: () => void): Promise<void> {
+    await $.turn.start({ text: 'go', turnId: id })
+    during()
+    await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: id, reason: 'answer' })
+  }
+
+  function listen(on: On): string[] {
+    const prompts: string[] = []
+    on('session.cwd', () => ({ value: '/r' }))
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    return prompts
+  }
+
+  test('an em dash added to a tracked file during the turn queues one follow-up', async ($, on) => {
+    const git: Record<string, string> = { [TOPLEVEL]: '/r\n', [DIFF]: '', [UNTRACKED]: '' }
+    engineBeneath(on, { git })
+    const clock = mock.clock(on)
+    const prompts = listen(on)
+    await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+
+    await turn($, 't1', () => {
+      git[DIFF] = addedLine('docs/usage.md', `parse ${DASH} then format`)
+    })
+    await clock.settle()
+    await turn($, 't2', () => {})
+    await clock.settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('docs/usage.md: 1')
+  })
+
+  test('em dashes already there when the turn started are left alone', async ($, on) => {
+    const git: Record<string, string> = { [TOPLEVEL]: '/r\n', [DIFF]: addedLine('notes.md', `mine ${DASH} kept`), [UNTRACKED]: '' }
+    engineBeneath(on, { git })
+    const clock = mock.clock(on)
+    const prompts = listen(on)
+    await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+
+    await turn($, 't1', () => {})
+    await clock.settle()
+
+    expect(prompts).toHaveLength(0)
+  })
+
+  test('a new untracked file with an em dash queues a follow-up', async ($, on) => {
+    const git: Record<string, string> = { [TOPLEVEL]: '/r\n', [DIFF]: '', [UNTRACKED]: '' }
+    const files: Record<string, string> = {}
+    engineBeneath(on, { git, files })
+    const clock = mock.clock(on)
+    const prompts = listen(on)
+    await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+
+    await turn($, 't1', () => {
+      git[UNTRACKED] = 'README.md\0'
+      files['/r/README.md'] = `# Durations\n\nParse ${DASH} and format.\n`
+    })
+    await clock.settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('README.md: 1')
   })
 })

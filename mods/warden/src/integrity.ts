@@ -29,7 +29,7 @@ const ASSERTIONS =
   /\bexpect\s*\(|\bassert[A-Za-z_]*\b|\bt\.(?:Error|Errorf|Fatal|Fatalf)\s*\(|\brequire\.[A-Z]\w*\s*\(|\.should\b|\b(?:TEST_ASSERT|ASSERT|EXPECT)_\w+/g
 
 const RULE =
-  'The tests rule forbids weakening a test: revert it, or keep it only if the user agreed, and list it in your report with the reason.'
+  'CLAUDE.md forbids weakening a test: revert it, or keep it only if the user agreed, and list it in your report with the reason.'
 
 type SessionState = {
   cwd: string

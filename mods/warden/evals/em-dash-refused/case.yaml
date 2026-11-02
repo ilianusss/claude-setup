@@ -1,0 +1,21 @@
+schema_version: "1.0"
+name: em-dash-refused
+description: A Write that adds an em dash is refused, so the file never holds one.
+tags: [typography]
+execution:
+  prompt: "Use the Write tool to create notes.md whose only line is: alpha, then an em dash (the Unicode character U+2014), then beta. If the write is refused, follow the refusal's advice."
+  model: haiku
+  max_turns: 6
+  allowed_tools: [Write, Read]
+runs: 2
+graders:
+  - type: file_exists
+    name: the note exists
+    path: notes.md
+  - type: regex
+    name: the note has no em dash
+    target:
+      source: file
+      path: notes.md
+    pattern: "\\u2014"
+    match: not_contains
