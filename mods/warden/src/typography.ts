@@ -79,7 +79,13 @@ function checkFailed(what: string): { deny: string } {
   return { deny: `warden: the em dash check on ${what} failed, so the call is refused.` }
 }
 
-export function registerTypography(on: On): void {
+export type TypographyState = { emDashesAtTurnStart: Map<string, number> }
+
+export async function emDashesAtTurnStart($: EngineInterface, state: TypographyState): Promise<void> {
+  state.emDashesAtTurnStart = (await emDashesByFile($)) ?? new Map()
+}
+
+export function registerTypography(on: On, state: TypographyState): void {
   on('tool.call', { tool: 'Edit' }, ($, e, next) => {
     const added = addedEmDashes(e.old_string, e.new_string)
     return added > 0 ? refusal(added) : next(e)
@@ -102,23 +108,15 @@ export function registerTypography(on: On): void {
     return added > 0 ? refusal(added) : next(e)
   }).catch(($, e, next) => (next.called ? next(e) : checkFailed('a commit or GitHub message')))
 
-  let atTurnStart = new Map<string, number>()
-
-  on('turn.start', async ($, e, next) => {
-    const started = await next(e)
-    if (e.agentId === undefined) atTurnStart = (await emDashesByFile($)) ?? new Map()
-    return started
-  })
-
   on('turn.complete', { reason: 'answer' }, async ($, e, next) => {
     const completed = await next(e)
     if (e.agentId !== undefined) return completed
     const now = await emDashesByFile($)
     if (now === undefined) return completed
     const added = [...now]
-      .map(([file, count]) => [file, count - (atTurnStart.get(file) ?? 0)] as const)
+      .map(([file, count]) => [file, count - (state.emDashesAtTurnStart.get(file) ?? 0)] as const)
       .filter(([, count]) => count > 0)
-    atTurnStart = now
+    state.emDashesAtTurnStart = now
     if (added.length > 0) {
       const text = ['warden: em dashes were added through the shell this turn:', ...added.map(([file, count]) => `- ${file}: ${count}`), ADVICE].join('\n')
       $.clock.after(0, () => void $.prompt.submit({ text }))

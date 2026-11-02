@@ -31,7 +31,7 @@ const ASSERTIONS =
 const RULE =
   'CLAUDE.md forbids weakening a test: revert it, or keep it only if the user agreed, and list it in your report with the reason.'
 
-type SessionState = {
+export type IntegrityState = {
   cwd: string
   root: string | undefined
   globs: string[]
@@ -93,6 +93,11 @@ async function gitRoot($: EngineInterface, cwd: string): Promise<string | undefi
   }
 }
 
+async function uncommittedChanges($: EngineInterface, root: string): Promise<Map<string, { removed: string; added: string }> | undefined> {
+  const diff = await $.process.run(['git', 'diff', 'HEAD', '-U0', '--no-color', '--no-ext-diff'], { cwd: root })
+  return diff.exitCode === 0 ? changesByFile(diff.stdout) : undefined
+}
+
 async function projectTestGlobs($: EngineInterface, base: string): Promise<string[]> {
   try {
     const config: unknown = JSON.parse(await $.fs.read(`${base}/.claude/workflow.json`))
@@ -111,23 +116,41 @@ async function readOrEmpty($: EngineInterface, path: string): Promise<string> {
   }
 }
 
-export function registerIntegrity(on: On): void {
-  let session: SessionState = { cwd: '', root: undefined, globs: DEFAULT_TEST_GLOBS, reported: new Set() }
+export function integrityState(): IntegrityState {
+  return { cwd: '', root: undefined, globs: DEFAULT_TEST_GLOBS, reported: new Set() }
+}
 
-  const relative = (path: string): string => {
-    const base = session.root ?? session.cwd
-    return base !== '' && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path
-  }
-  const isTest = (path: string): boolean => matchesAny(relative(path), [...session.globs, ...SNAPSHOT_GLOBS])
+function relative(session: IntegrityState, path: string): string {
+  const base = session.root ?? session.cwd
+  return base !== '' && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path
+}
 
-  const findingsFor = (file: string, before: string, after: string): string[] => {
-    const found = weakenings(before, after)
-    return matchesAny(file, SNAPSHOT_GLOBS) ? [...found, 'changed a snapshot: read every line of the change'] : found
-  }
+function isTest(session: IntegrityState, path: string): boolean {
+  return matchesAny(relative(session, path), [...session.globs, ...SNAPSHOT_GLOBS])
+}
 
+function findingsFor(file: string, before: string, after: string): string[] {
+  const found = weakenings(before, after)
+  return matchesAny(file, SNAPSHOT_GLOBS) ? [...found, 'changed a snapshot: read every line of the change'] : found
+}
+
+function findingsIn(session: IntegrityState, changes: Map<string, { removed: string; added: string }>): string[] {
+  return [...changes]
+    .filter(([file]) => isTest(session, file))
+    .flatMap(([file, change]) => findingsFor(file, change.removed, change.added).map(finding => `${file}: ${finding}`))
+}
+
+// Uncommitted weakenings from before the turn are not this turn's doing.
+export async function weakeningsAtTurnStart($: EngineInterface, session: IntegrityState): Promise<void> {
+  if (session.root === undefined) return
+  const changes = await uncommittedChanges($, session.root)
+  for (const key of changes === undefined ? [] : findingsIn(session, changes)) session.reported.add(key)
+}
+
+export function registerIntegrity(on: On, session: IntegrityState): void {
   const withNote = <T extends string>(ran: ToolCallResult<T>, path: string, before: string, after: string) => {
-    if (ran.deny !== undefined || ran.isError === true || !isTest(path)) return ran
-    const file = relative(path)
+    if (ran.deny !== undefined || ran.isError === true || !isTest(session, path)) return ran
+    const file = relative(session, path)
     const findings = findingsFor(file, before, after)
     if (findings.length === 0) return ran
     for (const finding of findings) session.reported.add(`${file}: ${finding}`)
@@ -137,36 +160,32 @@ export function registerIntegrity(on: On): void {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     const root = await gitRoot($, e.cwd)
-    session = {
+    Object.assign(session, {
       cwd: e.cwd,
       root,
       globs: [...DEFAULT_TEST_GLOBS, ...(await projectTestGlobs($, root ?? e.cwd))],
       reported: new Set(),
-    }
+    })
     return started
   })
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => withNote(await next(e), e.file_path, e.old_string, e.new_string))
 
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
-    const before = isTest(e.file_path) ? await readOrEmpty($, e.file_path) : ''
+    const before = isTest(session, e.file_path) ? await readOrEmpty($, e.file_path) : ''
     return withNote(await next(e), e.file_path, before, e.content)
   })
 
   on('turn.complete', async ($, e, next) => {
     const completed = await next(e)
     if (e.agentId !== undefined || e.reason !== 'answer' || session.root === undefined) return completed
-    const diff = await $.process.run(['git', 'diff', 'HEAD', '-U0', '--no-color', '--no-ext-diff'], { cwd: session.root })
-    if (diff.exitCode !== 0) return completed
+    const changes = await uncommittedChanges($, session.root)
+    if (changes === undefined) return completed
     const fresh: string[] = []
-    for (const [file, change] of changesByFile(diff.stdout)) {
-      if (!isTest(file)) continue
-      for (const finding of findingsFor(file, change.removed, change.added)) {
-        const key = `${file}: ${finding}`
-        if (session.reported.has(key)) continue
-        session.reported.add(key)
-        fresh.push(key)
-      }
+    for (const key of findingsIn(session, changes)) {
+      if (session.reported.has(key)) continue
+      session.reported.add(key)
+      fresh.push(key)
     }
     if (fresh.length > 0) {
       const text = ['warden: test files changed through the shell this turn:', ...fresh.map(key => `- ${key}`), RULE].join('\n')
@@ -174,4 +193,5 @@ export function registerIntegrity(on: On): void {
     }
     return completed
   })
+
 }
