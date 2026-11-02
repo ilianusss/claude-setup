@@ -12,7 +12,7 @@ Goal: make this project ready for workflows. You learn how to build, test and ch
 5. **Write**, from the templates folder (see Files):
    - `.claude/workflow.json` from `workflow.json`: `testGlobs` (every pattern a test file here matches), `testConfig` (the files that decide which tests run), `commands` (`test` and `testFiles` with `{files}`, then `lint`, `typecheck`, `format`, `e2e` when they exist), `testLevel`, `specsDir`, and `packages` for a monorepo.
    - `CLAUDE.md` from `project-claude.md`: commands, a five-line architecture with links, invariants, test level, conventions. Under 80 lines. When one exists, extend it instead of replacing it.
-   - `.claude/settings.json`: allow rules for this project's commands, each Bash rule twice (plain and with `rtk ` in front, because rules match the command after `rtk` rewrites it), and the sandbox exceptions the project needs (`sandbox.network.allowedDomains` for a host its tools reach).
+   - `.claude/settings.json`: allow rules for this project's commands, each Bash rule twice (plain and with `rtk ` in front, because rules match the command after `rtk` rewrites it).
 6. **Approval.** Inside a workflow, call `mcp__workflow__advance` with the commands you proved, the test level, and anything that failed. Outside one (`/workflow adopt`), show the three files and ask the user to review them.
 
 Rules:

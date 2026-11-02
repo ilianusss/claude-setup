@@ -40,7 +40,7 @@ function words(text: string): string[] {
 }
 
 async function status($: EngineInterface, { context, now }: Session): Promise<string> {
-  if (context.workflows.length === 0) return 'workflow: no workflow in this repo. /workflow new <title> starts one.'
+  if (context.workflows.length === 0) return 'no workflow in this repo. /workflow new <title> starts one.'
   const rows: string[] = []
   for (const workflow of context.workflows) {
     const here = workflow.branch === context.repo.branch ? ' (current branch)' : ''
@@ -51,7 +51,7 @@ async function status($: EngineInterface, { context, now }: Session): Promise<st
 
 async function all($: EngineInterface, now: number): Promise<string> {
   const open = (await openWorkflowsEverywhere($)).filter(entry => entry.status === 'active' || entry.status === 'paused')
-  if (open.length === 0) return 'workflow: no open workflow anywhere.'
+  if (open.length === 0) return 'no open workflow anywhere.'
   return ['Open workflows:', ...open.map(entry => `- ${entry.root}: ${entry.slug} (${entry.phase}), updated ${age(entry.updated, now)}`)].join('\n')
 }
 
@@ -81,9 +81,9 @@ async function placement($: EngineInterface, session: Session, slug: string): Pr
 async function start($: EngineInterface, session: Session, title: string): Promise<string> {
   const { context, now, runtime } = session
   const slug = slugify(title)
-  if (slug.length === 0) return 'workflow: give the workflow a title: /workflow new <title>'
+  if (slug.length === 0) return 'give the workflow a title: /workflow new <title>'
   if (context.workflows.some(workflow => workflow.slug === slug)) {
-    return `workflow: "${slug}" exists already. /workflow continue ${slug} resumes it.`
+    return `"${slug}" exists already. /workflow continue ${slug} resumes it.`
   }
   let size: Size
   let commits: boolean
@@ -94,8 +94,8 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     where = await placement($, session, slug)
   } catch (error) {
     return error instanceof Error && error.message.startsWith('git ')
-      ? `workflow: ${error.message}. Nothing was created.`
-      : 'workflow: cancelled, nothing was created.'
+      ? `${error.message}. Nothing was created.`
+      : 'cancelled, nothing was created.'
   }
 
   const phase = firstPhase(size, context.config === undefined)
@@ -123,12 +123,12 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   await saveWorkflow($, context.repo, context.paths, workflow)
   await registerToolsOnce($, runtime)
   if (!where.here) {
-    return `workflow: started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Start a session there and run /workflow continue ${slug}.`
+    return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Start a session there and run /workflow continue ${slug}.`
   }
   const fresh = await loadContext($)
   await refreshStatus($, fresh)
   submitLater($, await phasePrompt($, fresh ?? context, workflow))
-  return `workflow: started "${slug}" (${size}) on ${where.branch}, phase ${phase}.`
+  return `started "${slug}" (${size}) on ${where.branch}, phase ${phase}.`
 }
 
 function pick(context: Context, slug: string | undefined): Workflow {
@@ -148,7 +148,7 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
   const { now } = session
   let context = session.context
   const target = pick(context, slug)
-  if (!isOpen(target)) return `workflow: "${target.slug}" is ${target.status}.`
+  if (!isOpen(target)) return `"${target.slug}" is ${target.status}.`
   if (target.branch !== context.repo.branch) {
     const answer = await askOrUndefined(
       $,
@@ -156,7 +156,7 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
       [SWITCH.yes(target.branch), SWITCH.no],
       'Branch',
     )
-    if (answer !== SWITCH.yes(target.branch)) return `workflow: stayed on ${context.repo.branch}; nothing changed.`
+    if (answer !== SWITCH.yes(target.branch)) return `stayed on ${context.repo.branch}; nothing changed.`
     await switchBranch($, context.repo, target.branch, false)
     context = (await loadContext($)) ?? context
   }
@@ -178,7 +178,7 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
   if (clearFirst) clearThenSubmit($, prompt)
   else submitLater($, prompt)
   const action = clearFirst ? 'clearing the context, then continuing' : 'continuing'
-  return `workflow: ${action} "${target.slug}": ${await phaseLabel($, context, resumed)}.${elsewhere}`
+  return `${action} "${target.slug}": ${await phaseLabel($, context, resumed)}.${elsewhere}`
 }
 
 async function pause($: EngineInterface, { context, now }: Session, slug: string | undefined): Promise<string> {
@@ -186,7 +186,7 @@ async function pause($: EngineInterface, { context, now }: Session, slug: string
   await saveWorkflow($, context.repo, context.paths, withLog({ ...target, status: 'paused', updated: iso(now) }, day(now), 'paused'))
   await refreshStatus($)
   submitLater($, pausePrompt(target))
-  return `workflow: pausing "${target.slug}". Claude writes the handoff, then stops.`
+  return `pausing "${target.slug}". Claude writes the handoff, then stops.`
 }
 
 async function close($: EngineInterface, session: Session, slug: string | undefined, reason: string, abandon: boolean): Promise<string> {
@@ -196,23 +196,23 @@ async function close($: EngineInterface, session: Session, slug: string | undefi
     const closed = withLog({ ...target, status: 'abandoned', updated: iso(now) }, day(now), `abandoned: ${reason || 'no reason given'}`)
     await saveWorkflow($, context.repo, context.paths, closed)
     await refreshStatus($)
-    return `workflow: abandoned "${target.slug}".`
+    return `abandoned "${target.slug}".`
   }
   if (target.size === 'project' && target.phase !== 'retro' && target.phase !== 'done') {
     const answer = await askOrUndefined($, `Run the retro of "${target.slug}" before closing it?`, [RETRO.run, RETRO.close], 'Retro')
-    if (answer === undefined) return 'workflow: cancelled, nothing changed.'
+    if (answer === undefined) return 'cancelled, nothing changed.'
     if (answer === RETRO.run) {
       const retro: Workflow = { ...target, phase: 'retro', status: 'active', updated: iso(now) }
       await saveWorkflow($, context.repo, context.paths, withLog(retro, day(now), 'retro started'))
       await refreshStatus($)
       submitLater($, await phasePrompt($, context, retro))
-      return `workflow: starting the retro of "${target.slug}".`
+      return `starting the retro of "${target.slug}".`
     }
   }
   const done: Workflow = { ...target, phase: 'done', status: 'done', updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, withLog(done, day(now), 'done'))
   await refreshStatus($)
-  return `workflow: "${target.slug}" is done.`
+  return `"${target.slug}" is done.`
 }
 
 function byThePerson(origin: PromptOrigin): boolean {
@@ -220,10 +220,10 @@ function byThePerson(origin: PromptOrigin): boolean {
 }
 
 async function unlock($: EngineInterface, session: Session, args: string[], origin: PromptOrigin): Promise<string> {
-  if (!byThePerson(origin)) return 'workflow: only the user unlocks a test, by typing /workflow unlock. Claude asks with mcp__workflow__unlock.'
+  if (!byThePerson(origin)) return 'only the user unlocks a test, by typing /workflow unlock. Claude asks with mcp__workflow__unlock.'
   const [file, ...reason] = args
-  if (file === undefined) return 'workflow: /workflow unlock <file> <reason>'
-  return `workflow: ${await unlockFile($, session.context, file, reason.join(' ') || 'unlocked by the user', true, session.now)}`
+  if (file === undefined) return '/workflow unlock <file> <reason>'
+  return `${await unlockFile($, session.context, file, reason.join(' ') || 'unlocked by the user', true, session.now)}`
 }
 
 function inferred(files: ReadonlySet<string>, slicesText: string): { size: Size; phase: Phase; slice: number } {
@@ -286,7 +286,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
     submitLater($, await setupPrompt($))
     report.push('no .claude/workflow.json yet: Claude runs the setup phase')
   }
-  return report.length > 0 ? `workflow: ${report.join('; ')}.` : 'workflow: nothing to adopt here: the setup exists and every spec folder has its workflow.'
+  return report.length > 0 ? `${report.join('; ')}.` : 'nothing to adopt here: the setup exists and every spec folder has its workflow.'
 }
 
 async function dispatch($: EngineInterface, session: Session, args: string, origin: PromptOrigin): Promise<string> {
@@ -330,11 +330,11 @@ export function registerCommands(on: On, runtime: Runtime): void {
       if (words(e.args)[0] === 'all') return { text: await all($, now) }
       const context = await loadContext($)
       if (context === undefined) {
-        return { text: 'workflow: this folder is not in a git repository. Run git init, then /workflow new <title>.' }
+        return { text: 'this folder is not in a git repository. Run git init, then /workflow new <title>.' }
       }
       return { text: await dispatch($, { context, now, runtime }, e.args, e.origin) }
     } catch (error) {
-      return { text: error instanceof Refusal ? `workflow: ${error.message}` : `workflow: ${describe(error)}` }
+      return { text: error instanceof Refusal ? `${error.message}` : `${describe(error)}` }
     }
   })
 }

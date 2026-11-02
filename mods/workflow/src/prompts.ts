@@ -1,5 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
+import type { Config } from './config'
 import { readDoc, readSlices, specsFolder } from './context'
 import type { Context } from './context'
 import { readPhase } from './phases'
@@ -29,6 +30,24 @@ function files($: EngineInterface, specs: string): string {
     `- This workflow's documents: \`${specs}/\``,
     `- Guides the phase names: \`${$.plugin.root}/guides/\``,
     `- Templates: \`${$.plugin.root}/templates/\``,
+  ].join('\n')
+}
+
+function checks(config: Config | undefined): string | undefined {
+  if (config === undefined) return undefined
+  const sliceTests = config.commands.testFiles ?? config.commands.test
+  const red = sliceTests.includes('{files}')
+    ? `run \`${sliceTests}\` with this slice's test files in place of \`{files}\`, sorted and separated by spaces`
+    : `run \`${sliceTests}\``
+  const green = [config.commands.lint, config.commands.typecheck, config.commands.test].filter(
+    (command): command is string => command !== undefined,
+  )
+  return [
+    '## Checks',
+    '',
+    `- Red: ${red}, exactly as written with nothing appended, then call mcp__workflow__lock.`,
+    `- Green: once the slice tests pass, run ${green.map(command => `\`${command}\``).join(', ')} exactly as written, then call mcp__workflow__verify.`,
+    ...(config.packages.length > 0 ? ['- A file inside a package uses that package\'s commands from `.claude/workflow.json`; lock names them.'] : []),
   ].join('\n')
 }
 
@@ -68,6 +87,7 @@ export async function phasePrompt(
     standing(workflow),
     files($, specs),
     workflow.phase === 'build' ? await currentSlice($, context, workflow) : undefined,
+    workflow.phase === 'build' ? checks(context.config) : undefined,
   ]
   return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
 }

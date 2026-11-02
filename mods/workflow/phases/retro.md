@@ -7,7 +7,7 @@ Goal: what this workflow taught, turned into small changes to the setup so the n
 
 1. **Gather the evidence:** the review findings, the corrections the user made during the workflow, the unlock entries in the state log (each says a test or a requirement was wrong), slices that took several sessions or got stuck, and where the build departed from `design.md`.
 2. **One proposal per pattern that happened more than once**, smallest first:
-   - a line in a rule (`~/.claude/rules/`) or in the project CLAUDE.md;
+   - a line in the global CLAUDE.md (`~/.claude/CLAUDE.md`) or in the project CLAUDE.md;
    - an edit to a global skill (`~/.claude/skills/`);
    - a project skill (`.claude/skills/`) for what only this stack needs;
    - nothing, for a one-off.

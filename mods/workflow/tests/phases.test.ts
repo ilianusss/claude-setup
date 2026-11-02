@@ -141,3 +141,36 @@ describe('handoff', () => {
     expect(state(fake.files).paths).toEqual(['src'])
   })
 })
+
+describe('phase write scope through the shell', () => {
+  test('a shell command that changes code in the design phase gets a note naming the file', async ($, on) => {
+    const fake = fakeEngine(on, DESIGN, 'feat/login')
+    fake.shellWrites.set("sed -i '' s/a/b/ src/login.ts", { 'src/login.ts': 'export const b = 1' })
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'Bash', command: "sed -i '' s/a/b/ src/login.ts" })
+
+    expect(ran.context?.join('\n')).toContain('src/login.ts')
+    expect(ran.context?.join('\n')).toContain('design phase')
+  })
+
+  test('a shell command that writes the design documents gets no note', async ($, on) => {
+    const fake = fakeEngine(on, DESIGN, 'feat/login')
+    fake.shellWrites.set('cat > docs/specs/login/design.md', { 'docs/specs/login/design.md': '# Login: design' })
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'Bash', command: 'cat > docs/specs/login/design.md' })
+
+    expect(ran.context ?? []).toHaveLength(0)
+  })
+
+  test('in the build phase a shell command may change code', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo(), 'feat/login')
+    fake.shellWrites.set("sed -i '' s/a/b/ src/login.ts", { 'src/login.ts': 'export const b = 1' })
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'Bash', command: "sed -i '' s/a/b/ src/login.ts" })
+
+    expect((ran.context ?? []).join('\n')).not.toContain('src/login.ts')
+  })
+})

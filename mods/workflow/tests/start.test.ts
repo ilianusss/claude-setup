@@ -109,4 +109,17 @@ describe('status', () => {
 
     expect(ran.text).toContain(`${ROOT}: add-login (design)`)
   })
+
+})
+
+describe('command replies', () => {
+  test('leave the "workflow:" prefix to Claude Code, which adds it to every reply', async ($, on) => {
+    const fake = fakeEngine(on, WITH_CONFIG)
+    await start($)
+
+    const replies = [await run($, ''), await run($, 'all'), await run($, 'new'), await run($, 'continue'), await run($, 'unlock')]
+    await fake.clock.settle()
+
+    for (const ran of replies) expect(ran.text).not.toMatch(/^workflow:/)
+  })
 })
