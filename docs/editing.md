@@ -53,19 +53,6 @@ git config filter.strip-model-defaults.smudge cat
 
 A pull that changes `settings.json` replaces the file with the committed one, which has none of these keys: set the model again with `/model` afterwards.
 
-## The workflow mod is its own repo
-
-`mods/workflow` is a git submodule pointing at `ilianusss/claude-workflow`. To change it:
-
-```sh
-cd ~/.claude/mods/workflow
-git switch -c <keyword>/<name>     # work and commit here
-cd ~/.claude
-git add mods/workflow              # then commit the new pointer
-```
-
-Push `claude-workflow` before `~/.claude`, or a fresh clone cannot find the commit the pointer names.
-
 ## After a Claude Code update
 
 The mod API is early access and may change. After an update:

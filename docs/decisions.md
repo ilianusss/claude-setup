@@ -48,3 +48,7 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 ## 2026-10-26: house stops asking for checkout, switch, restore and stash
 
 - **`git checkout`, `git switch`, `git restore` and `git stash` no longer ask**: they asked on every branch switch and every stash, too often for the risk. The CLAUDE.md Safety section still asks Claude to check before discarding uncommitted work; `reset --hard`, `clean` and `branch -D` keep the ask.
+
+## 2026-11-02: the workflow mod lives in this repo
+
+- **Not in a submodule**: one person uses it, and every change cost a commit and a push in two repos. The `ilianusss/claude-workflow` repo and its Desktop clone are no longer used, and the mod's marketplace file is gone: it loads from its folder through `CLAUDE_CODE_PLUGIN_DIRS`.

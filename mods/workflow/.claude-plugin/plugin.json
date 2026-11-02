@@ -1,0 +1,6 @@
+{
+  "name": "workflow",
+  "version": "0.0.1",
+  "description": "Drives a project workflow (spec, design, slices, build, review, retro) from one /workflow command, with tests locked between red and green.",
+  "author": { "name": "ilianusss" }
+}

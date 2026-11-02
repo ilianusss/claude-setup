@@ -1,3 +1,0 @@
-[submodule "mods/workflow"]
-	path = mods/workflow
-	url = ../claude-workflow.git

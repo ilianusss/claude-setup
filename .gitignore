@@ -5,7 +5,6 @@
 !/README.md
 !/.gitignore
 !/.gitattributes
-!/.gitmodules
 !/.github/
 !/CLAUDE.md
 !/settings.json
