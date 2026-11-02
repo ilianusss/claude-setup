@@ -4,7 +4,7 @@ A Claude Code setup for fullstack and devops work; this repo is `~/.claude` itse
 
 ## Role in the system
 
-The setup loads two mods, both kept here: `house`, which guards every session, and `workflow`, which runs project workflows. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
+The setup loads two mods, both kept here: `warden`, which guards every session, and `workflow`, which runs project workflows. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
 
 ## Prerequisites
 
@@ -45,7 +45,7 @@ settings.json    permissions, sandbox, the rtk hook, the mods to load
 rules/           guidance loaded when Claude touches a matching file
 skills/          knowledge Claude loads on demand
 agents/          the reviewer, run in a fresh context
-mods/house/      every session: em dashes, safety asks, weakened tests
+mods/warden/      every session: em dashes, safety asks, weakened tests
 mods/workflow/   the /workflow mod
 docs/            how it works and how to change it
 ```

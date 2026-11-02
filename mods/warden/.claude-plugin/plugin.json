@@ -1,0 +1,7 @@
+{
+  "name": "warden",
+  "version": "0.1.0",
+  "description": "Guards every session: no em dash, person-only asks for risky commands, and no weakened tests.",
+  "author": { "name": "ilianusss" },
+  "types": "./types/index.d.ts"
+}

@@ -1,4 +1,4 @@
-// The house mod has its own copy: each mod loads on its own from its folder.
+// The warden mod has its own copy: each mod loads on its own from its folder.
 
 const compiled = new Map<string, RegExp>()
 

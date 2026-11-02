@@ -89,6 +89,25 @@ describe('end of turn', () => {
     expect(prompts[0]).toContain('src/cart.test.ts: removed 1 assertion')
   })
 
+  test('a weakening already in the diff when the turn started is left alone', async ($, on) => {
+    engineBeneath(on, { git: { [TOPLEVEL]: '/r\n', [DIFF]: SHELL_DIFF } })
+    const clock = mock.clock(on)
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.settle()
+
+    expect(prompts).toHaveLength(0)
+  })
+
   test('a clean diff queues nothing', async ($, on) => {
     engineBeneath(on, { git: { [TOPLEVEL]: '/r\n', [DIFF]: '' } })
     const clock = mock.clock(on)
