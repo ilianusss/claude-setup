@@ -1,11 +1,6 @@
 ---
 name: changing-database-schema
 description: Changing a database schema safely - expand then contract, never editing an applied migration, backfills apart from schema changes, avoiding long locks, testing what a migration promises against a real database, and rollback. Use when writing or reviewing a migration, a Prisma, TypeORM, Drizzle, Alembic, golang-migrate or sqlx schema change, an index, a constraint, or a data backfill.
-paths:
-  - "**/migrations/**"
-  - "**/*.prisma"
-  - "**/*.sql"
-  - "**/alembic/**"
 ---
 
 # Changing a database schema

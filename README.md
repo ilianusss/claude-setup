@@ -41,11 +41,10 @@ The daily commands are `/workflow` and its subcommands, described in [docs/workf
 
 ```text
 CLAUDE.md        instructions for every session
-settings.json    permissions, sandbox, the rtk hook, the mods to load
-rules/           guidance loaded when Claude touches a matching file
+settings.json    permissions, the rtk hook, the mods to load
 skills/          knowledge Claude loads on demand
 agents/          the reviewer, run in a fresh context
-mods/warden/      every session: em dashes, safety asks, weakened tests
+mods/warden/     every session: em dashes, safety asks, weakened tests
 mods/workflow/   the /workflow mod
 docs/            how it works and how to change it
 ```

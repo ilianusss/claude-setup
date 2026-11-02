@@ -41,7 +41,8 @@
     ]
   },
   "enabledPlugins": {
-    "skin@ilianusss": true
+    "skin@ilianusss": true,
+    "figma@synced": false
   },
   "extraKnownMarketplaces": {
     "team": {
@@ -59,5 +60,6 @@
     }
   },
   "tui": "fullscreen",
-  "theme": "dark-ansi"
+  "theme": "dark-ansi",
+  "idleCompaction": false
 }

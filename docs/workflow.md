@@ -40,7 +40,7 @@ The status line shows the workflow on the current branch: `workflow login: build
 | slice | `slices.md`: a walking skeleton first, then one behaviour per slice | The slices and their criteria |
 | build | Code and tests, one slice per session | Nothing: each slice closes when the mod has seen it green |
 | inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
-| retro | Small changes to rules and skills, from what repeated | Each change |
+| retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
 A phase can only write its own files: during the spec, a write to source code is refused. Claude moves a phase on with a dialog you answer (Approve or Not yet); auto mode cannot answer it.
 

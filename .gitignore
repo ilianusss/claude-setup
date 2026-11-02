@@ -8,7 +8,6 @@
 !/.github/
 !/CLAUDE.md
 !/settings.json
-!/rules/
 !/skills/
 !/agents/
 !/mods/
@@ -21,3 +20,6 @@
 /mods/*/.claude-plugin/types/
 
 .DS_Store
+
+# Written by claude plugin eval
+/mods/*/evals/results/

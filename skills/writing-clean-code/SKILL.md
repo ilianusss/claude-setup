@@ -44,6 +44,7 @@ While you are in a file, delete comments that restate the code, contradict it, d
 - No escape hatches to silence the compiler (`any`, casts, `!`, `# type: ignore`, `unsafe` without a reason).
 - Make illegal states unrepresentable: a discriminated union over a status beats a bag of optional fields.
 - Prefer immutable values.
+- In TypeScript: no floating promises, `async` only when the function awaits, and `import type` for imports used only as types.
 
 ## Errors
 
