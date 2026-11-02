@@ -20,7 +20,7 @@
 - Tiny changes (typo, config value, dependency bump): just do it, no test, say so.
 - Any behaviour change in a repo with a test setup follows the `writing-tests-first` skill. A bug fix always starts with a failing test that reproduces it. No test setup: ask before adding one.
 - Never weaken a test or change an expectation to match what the code returns. If a test looks wrong, show why with evidence and ask before changing it.
-- Non-trivial changes (several files, a design choice, or more than one PR worth): a short plan and my go-ahead before writing code, or suggest `/workflow new`.
+- Non-trivial changes: when it fits one session (several files, a design choice), enter plan mode and wait for my approval before editing; when it takes several slices or more than one PR, suggest `/workflow new`.
 - Scratch files and scripts go in the session scratchpad, never in the repo.
 
 ## Scope
