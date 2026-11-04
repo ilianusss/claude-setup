@@ -31,10 +31,10 @@ Every Bash permission rule is written twice, plain and with `rtk ` in front, bec
 
 A mod's tests run against Claude Code's own engine, which also enforces how a mod is written: hooks are function literals, one hook per event without a matcher, and `$` only ever passed straight to a top-level function. A module that breaks one of these does not load, and the test output names the line.
 
-Before committing a change to a mod, run both mods' tests:
+Before committing a change to a mod, run every mod's tests:
 
 ```sh
-claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow
+claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow && claude plugin test ~/.claude/mods/scribe
 ```
 
 ## Reloading
