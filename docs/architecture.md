@@ -20,7 +20,7 @@ How this setup is built, and why each instruction lives where it does. For using
 | `CLAUDE.md` | Every session | Always (about 45 lines) | Intent and rules that apply everywhere |
 | `skills/*` | Description always, body when relevant | About 400 characters each | Knowledge and procedures |
 | `agents/reviewer.md` | When spawned | A cold start each time | The fresh-context review, once per feature |
-| `mods/warden`, `mods/workflow` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
+| `mods/warden`, `mods/workflow`, `mods/scribe` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
 | Permissions (`settings.json`) | Never in context | Zero | Hard limits that hold even if a mod fails |
 
 ## File map
@@ -33,6 +33,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── agents/reviewer.md
 ├── mods/warden/           every session: em dashes, safety asks, test integrity
 ├── mods/workflow/         /workflow: phases, the test lock, gates
+├── mods/scribe/           every prompt: typos and grammar fixed by Haiku
 └── docs/
 ```
 
@@ -64,7 +65,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 
 ## The mods
 
-Both are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
+All three are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
 
 **warden** applies to every session:
 
@@ -81,7 +82,15 @@ Both are TypeScript modules for the Claude Code mod API (early access: it may ch
 - guards: locked tests refused to Edit and restored after a shell change, each phase limited to the files it may write;
 - prompts composed per step: the phase file, the state, and for a build the slice with the design sections it names.
 
-The phase files, guides and templates are markdown inside the mod. If the API breaks after an update, they still work by hand (see [editing.md](editing.md)).
+**scribe** fixes each prompt before Claude reads it:
+
+- a `prompt.submit` hook sends the prompt to Haiku (low effort, 4 s timeout) with orders to fix spelling, grammar and punctuation only, in the prompt's own language, and to leave code, paths, URLs and `@mentions` as written;
+- only prompts the person typed (composer or Remote Control) of 3 words or more and under 2,000 characters; slash commands, engine prompts, notifications and long pastes go as typed;
+- the correction is dropped when its length moves more than 25% (an answer instead of a fix), when it changes a protected span (fenced or inline code, a URL, a path, an `@mention`), or when it adds an em dash;
+- a toast lists what changed (`scribe: teh → the`). The transcript stores the corrected text, so the toast is the only trace of the typed one;
+- it fails open: a timeout, an API error or a failed hook sends the prompt as typed. Each prompt costs one Haiku call and about a second.
+
+The phase files, guides and templates are markdown inside the workflow mod. If the API breaks after an update, they still work by hand (see [editing.md](editing.md)).
 
 ## Token budget
 

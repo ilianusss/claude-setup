@@ -1,0 +1,6 @@
+{
+  "name": "scribe",
+  "version": "0.1.0",
+  "description": "Fixes typos and grammar in each prompt with Haiku before Claude reads it.",
+  "author": { "name": "ilianusss" }
+}

@@ -4,7 +4,7 @@ A Claude Code setup for fullstack and devops work; this repo is `~/.claude` itse
 
 ## Role in the system
 
-The setup loads two mods, both kept here: `warden`, which guards every session, and `workflow`, which runs project workflows. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
+The setup loads three mods, all kept here: `warden`, which guards every session, `workflow`, which runs project workflows, and `scribe`, which fixes typos in each prompt. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
 
 ## Prerequisites
 
@@ -46,6 +46,7 @@ skills/          knowledge Claude loads on demand
 agents/          the reviewer, run in a fresh context
 mods/warden/     every session: em dashes, safety asks, weakened tests
 mods/workflow/   the /workflow mod
+mods/scribe/     every prompt: typos and grammar fixed by Haiku
 docs/            how it works and how to change it
 ```
 
