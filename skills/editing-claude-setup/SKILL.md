@@ -35,7 +35,8 @@ Keep an instruction only if it changes behaviour: the test is "would Claude do t
 
 ## Gotchas measured on this machine
 
-- **Bash permission rules match the command after `rtk` rewrites it.** Write every Bash rule twice: `Bash(git push:*)` and `Bash(rtk git push:*)`.
+- **Bash permission rules match the command after `rtk` rewrites it.** Write every Bash rule twice: `Bash(gh pr merge:*)` and `Bash(rtk gh pr merge:*)`. git is the exception: it is in rtk's `exclude_commands`, because a session in a worktree refuses `rtk git ...`.
+- **Setup changes are made in a worktree of `~/.claude` too, and the running setup only changes once the branch is merged into main**: mods load from `~/.claude/mods`. Test a mod by its worktree path, after copying the gitignored `.claude-plugin/types/` folders from the main checkout for `tsc`. `claude plugin eval` sandboxes run in a git repo, so a case that writes a file meets warden's worktree guard.
 - **A tool a mod answers itself skips the permission step.** A mod tool that needs the user's approval asks with `$.ui.ask`, never through `tool.check` or a settings rule.
 - **A mod command cannot run another command from its own hook.** Answer first, then run it from `$.clock.after`.
 - **`tool.call` sees a Bash command before `rtk`, `tool.check` after it.** Match both forms.

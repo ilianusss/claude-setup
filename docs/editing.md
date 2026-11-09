@@ -4,7 +4,7 @@ How to change this setup, by hand or with Claude.
 
 ## With Claude
 
-Ask in plain words ("add a rule that...", "the workflow should also..."). The `editing-claude-setup` skill loads when you ask for such a change; it decides where the instruction goes, applies the house style and says how to test it. Run the session from `~/.claude` so the paths match.
+Ask in plain words ("add a rule that...", "the workflow should also..."). The `editing-claude-setup` skill loads when you ask for such a change; it decides where the instruction goes, applies the house style and says how to test it. Run the session from `~/.claude` so the paths match. Claude makes the change in a worktree under `~/.claude/.claude/worktrees/`, like in any repo; the running setup changes once you merge that branch into main.
 
 ## Where things go
 
@@ -39,7 +39,7 @@ claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/wo
 
 ## Reloading
 
-- **Mods** reload by themselves when their files change, in a running session.
+- **Mods** reload by themselves when their files change in `~/.claude/mods`, in a running session: a change in a worktree takes effect once merged.
 - **Rules, skills, agents, CLAUDE.md** are read when a session starts: start a new one, or `/clear`.
 - **settings.json**: most keys apply to the running session; restart if in doubt.
 

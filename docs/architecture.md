@@ -31,7 +31,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── settings.json          permissions, the rtk hook, the mods to load
 ├── skills/                10 knowledge skills
 ├── agents/reviewer.md
-├── mods/warden/           every session: em dashes, safety asks, test integrity
+├── mods/warden/           every session: em dashes, safety asks, test integrity, worktrees
 ├── mods/workflow/         /workflow: phases, the test lock, gates
 ├── mods/scribe/           every prompt: typos and grammar fixed by Haiku
 ├── mods/shush/            every prompt: short-answer rules for the reply
@@ -48,6 +48,7 @@ Everything else in `~/.claude` is Claude Code's runtime data, kept out of git by
 | Nothing is pushed, deployed or discarded without asking | CLAUDE.md, Safety | `warden` asks for the risky commands, force pushes and `rm -rf`; `/safety` lifts the infra, publish and force-push asks for one session. No settings rule backs it: `settings.json` holds no `ask` or `allow` rules, so the rest is on the prose |
 | No em dash | CLAUDE.md, Writing | `warden`: refuses edits, notebook cells, commit messages and GitHub text that add one; rewrites replies; flags the ones a shell command added, from the git diff at the end of the turn |
 | No weakened test | CLAUDE.md, How to work; `writing-tests-first` | `warden`: a note on each test edit, a follow-up at the end of a turn for shell changes |
+| Changes happen in a worktree, not in a repo's main checkout | CLAUDE.md, How to work | `warden`: a person-only dialog before an edit in a main checkout, the same dialog after a shell command that changed files there; `workflow`: `/workflow new` creates a worktree |
 | Tests stay apart from the implementation | `writing-tests-first`, the build phase | `workflow`: the test lock |
 | A phase stays in its lane | Phase instructions | `workflow`: each phase's write scope, refused on Edit and Write, noted when a shell command changes a file outside it |
 | Gates and unlocks are the user's | Phase instructions | `workflow`: `$.ui.ask` dialogs only a person can answer |
@@ -58,6 +59,7 @@ Everything else in `~/.claude` is Claude Code's runtime data, kept out of git by
 Run in M0 with a probe mod and headless sessions; they shaped the design.
 
 - **Permission rules match the command after `rtk` rewrites it.** A deny on `Bash(git push:*)` let `git push` through, because `rtk` had turned it into `rtk git push`. Every Bash rule is written twice.
+- **A session moved into a worktree by `EnterWorktree` refuses `rtk git ...`**: its isolation check cannot tell where a git command run through `rtk` goes. `git` is in rtk's `exclude_commands` (`~/Library/Application Support/rtk/config.toml`), so git commands run plain everywhere.
 - **Ask rules prompt the user in auto mode.**
 - **A mod's `tool.call` hook sees the command before `rtk`, and `tool.check` after it.** A failing rewritten command still comes back as an error with its exit code.
 - **A tool a mod answers itself skips the permission step.** Approvals go through `$.ui.ask`.
@@ -72,11 +74,13 @@ All four are TypeScript modules for the Claude Code mod API (early access: it ma
 
 - typography: refuses a Write, Edit or notebook cell that adds an em dash, and a commit message or GitHub body that holds one; rewrites em dashes in Claude's replies to a spaced hyphen before they are stored; at the end of each turn, compares the em dashes in the git diff and the untracked files with the start of the turn, and queues one follow-up for those a shell command added;
 - safety asks: a person-only ask for a built-in list of risky commands (discards, infra changes, gh merges and releases, publishes, `dropdb`), matched with or without `rtk`, in any segment of a compound command, in forms prefix rules miss (`git -C dir reset --hard`), through `env`, `bash -c` and `sh -c`, plus force pushes, `rm -rf`, and any shell command that names a secret file (`.env`, `.ssh/`, `.kube/config`, `.aws/credentials`, `.tfstate`, `.pem`, `.key`). The `/safety` command, obeyed only when typed at the prompt, lifts the asks for terraform, tofu, kubectl, helm, docker, publishes and force pushes for the rest of the session, with `warden: safety off` in the status line; typing it again restores them;
-- test integrity: a note when an edit adds `.only` or a skip, removes or changes an assertion, or rewrites a snapshot; at the end of a turn, the same check on the git diff catches shell changes made since the turn started and queues one follow-up.
+- test integrity: a note when an edit adds `.only` or a skip, removes or changes an assertion, or rewrites a snapshot; at the end of a turn, the same check on the git diff catches shell changes made since the turn started and queues one follow-up;
+- worktrees: an Edit, Write or notebook edit on a file that is not ignored, in a repo's main checkout (not a linked worktree), opens a person-only dialog: move the work to a worktree (the call is refused and points to `EnterWorktree`) or allow that checkout for the rest of the session. Edits sent together share one dialog. A shell command run while the session is in a main checkout is bracketed by two snapshots (status and content hash): the files it changed bring the same dialog, and the worktree answer adds a note to the command's result. Edits the person makes between commands are never attributed to Claude. A dismissed dialog or a headless run refuses the edit; a failure of the shell check lets the command's result through unchanged. Files outside any repo, ignored files and linked worktrees are never checked.
 
 **workflow** runs project workflows:
 
 - the `/workflow` command, whose bookkeeping (status, lists, closing) costs no model turn;
+- `/workflow new` creates a worktree `<repo>-<slug>` on `feat/<slug>` next to the repo, except in a linked worktree that runs no workflow yet, where it asks for the branch;
 - the state in `<git common dir>/claude-workflow/`, uncommitted, shared by every worktree, written only by the mod;
 - five tools for Claude (`handoff`, `advance`, `lock`, `verify`, `unlock`), registered only in repos with a workflow;
 - the test lock: a slice's tests are locked once the mod saw the exact test command fail on the current code, and the slice closes once it saw every check pass on the current code. The mod never runs project code: it watches the commands Claude runs through Bash;

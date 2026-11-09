@@ -21,6 +21,7 @@
 - Any behaviour change in a repo with a test setup follows the `writing-tests-first` skill. A bug fix always starts with a failing test that reproduces it. No test setup: ask before adding one.
 - Never weaken a test or change an expectation to match what the code returns. If a test looks wrong, show why with evidence and ask before changing it.
 - Non-trivial changes: when it fits one session (several files, a design choice), enter plan mode and wait for my approval before editing; when it takes several slices or more than one PR, suggest `/workflow new`.
+- In a git repo, call `EnterWorktree` before changing any file, unless the session already runs in a linked worktree (a workflow's, or one entered earlier). The main checkout may hold my own uncommitted work, and a worktree keeps yours apart from it. Uncommitted changes do not follow you into the worktree: when the task builds on them, ask. At the end, give the worktree's path and branch; committing, merging and removing it are mine to ask for.
 - Scratch files and scripts go in the session scratchpad, never in the repo.
 
 ## Scope

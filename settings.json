@@ -59,6 +59,9 @@
       "autoUpdate": true
     }
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "tui": "fullscreen",
   "theme": "dark-ansi",
   "idleCompaction": false

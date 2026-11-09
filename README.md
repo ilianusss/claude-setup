@@ -44,7 +44,7 @@ CLAUDE.md        instructions for every session
 settings.json    permissions, the rtk hook, the mods to load
 skills/          knowledge Claude loads on demand
 agents/          the reviewer, run in a fresh context
-mods/warden/     every session: em dashes, safety asks, weakened tests
+mods/warden/     every session: em dashes, safety asks, weakened tests, worktrees
 mods/workflow/   the /workflow mod
 mods/scribe/     every prompt: typos and grammar fixed by Haiku
 mods/shush/      every prompt: short-answer rules for the reply

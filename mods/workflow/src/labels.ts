@@ -15,11 +15,6 @@ export const BRANCH = {
   stay: (branch: string) => `Stay on ${branch}`,
 }
 
-export const WORKTREE = {
-  create: 'Create a worktree next to this repo',
-  here: 'Use this checkout anyway',
-}
-
 export const SWITCH = {
   yes: (branch: string) => `Switch to ${branch}`,
   no: 'Cancel',

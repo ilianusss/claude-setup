@@ -1,0 +1,17 @@
+schema_version: "1.0"
+name: worktree-edit
+description: A Write in a repo's main checkout is refused while nobody can allow it, and warden points to a worktree.
+tags: [worktree]
+execution:
+  # The sandbox runs in home/cwd, and home is a git repo: cwd is a main checkout. EnterWorktree is never available in an eval.
+  prompt: "Use the Write tool to create notes.md whose only line is `after`. If the write is refused, do not create the file another way: report the refusal's reason."
+  model: haiku
+  max_turns: 4
+  allowed_tools: [Write, Read]
+runs: 2
+graders:
+  - type: regex
+    name: warden refuses with its reason
+    target: trace
+    pattern: "is a main checkout"
+    match: contains
