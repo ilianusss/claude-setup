@@ -20,7 +20,7 @@ How this setup is built, and why each instruction lives where it does. For using
 | `CLAUDE.md` | Every session | Always (about 45 lines) | Intent and rules that apply everywhere |
 | `skills/*` | Description always, body when relevant | About 400 characters each | Knowledge and procedures |
 | `agents/reviewer.md` | When spawned | A cold start each time | The fresh-context review, once per feature |
-| `mods/warden`, `mods/workflow`, `mods/scribe`, `mods/shush` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
+| `mods/warden`, `mods/workflow`, `mods/scribe`, `mods/shush`, `mods/skin` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
 | Permissions (`settings.json`) | Never in context | Zero | Hard limits that hold even if a mod fails |
 
 ## File map
@@ -35,6 +35,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── mods/workflow/         /workflow: phases, the test lock, gates
 ├── mods/scribe/           every prompt: typos and grammar fixed by Haiku
 ├── mods/shush/            every prompt: short-answer rules for the reply
+├── mods/skin/             the transcript drawn in the ~/.theme palette
 └── docs/
 ```
 
@@ -68,7 +69,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 
 ## The mods
 
-All four are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
+All five are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
 
 **warden** applies to every session:
 
@@ -102,6 +103,12 @@ All four are TypeScript modules for the Claude Code mod API (early access: it ma
 - a prompt ending in a spaced `++` goes without the rules for that one reply, the `++` removed; `/shush off` and `/shush on`, obeyed only from the person, switch them for the session, with `shush: off` in the status line; every new session starts with them on;
 - listed before `scribe` in `CLAUDE_CODE_PLUGIN_DIRS`, so its hook runs first and strips the `++` before Haiku could drop it as punctuation;
 - no model call: about 300 tokens of context per typed prompt.
+
+**skin** redraws the transcript; only the drawing changes, never what the model reads:
+
+- tool rows, cards for tables, code, diffs, shell output, math and Mermaid charts, a usage band and a calm mode, each part switched with `/skin <part> on|off` (`mods/skin/FEATURES.md`);
+- its skins are the palettes of `SKIN_THEME_HOME` (`~/.theme`): picking one runs `theme colors`, and a theme switched elsewhere moves every session within about 2 s. A palette's `claude_<slot>`, `claude_spinner` and `claude_done` keys set its colours and words (`mods/skin/docs/theme-home.md`); without a theme home the built-in `miasma` draws;
+- listed last in `CLAUDE_CODE_PLUGIN_DIRS`: it hooks drawing and `prompt.compose` (the chart hint), not `prompt.submit`, so it does not meet `shush` or `scribe`.
 
 The phase files, guides and templates are markdown inside the workflow mod. If the API breaks after an update, they still work by hand (see [editing.md](editing.md)).
 

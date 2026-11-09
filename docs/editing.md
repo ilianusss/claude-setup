@@ -34,7 +34,7 @@ A mod's tests run against Claude Code's own engine, which also enforces how a mo
 Before committing a change to a mod, run every mod's tests:
 
 ```sh
-claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow && claude plugin test ~/.claude/mods/scribe && claude plugin test ~/.claude/mods/shush
+claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow && claude plugin test ~/.claude/mods/scribe && claude plugin test ~/.claude/mods/shush && claude plugin test ~/.claude/mods/skin
 ```
 
 ## Reloading
@@ -58,6 +58,6 @@ A pull that changes `settings.json` replaces the file with the committed one, wh
 
 The mod API is early access and may change. After an update:
 
-1. Run both mods' tests (above).
+1. Run every mod's tests (above).
 2. Start a session in a repo with a workflow: the status line shows `workflow: <slug>` and `/workflow` lists it.
 3. If a mod is broken, turn mods off by removing `CLAUDE_CODE_PLUGIN_DIRS` from `settings.json`. The permissions, CLAUDE.md and skills keep working. Workflows continue by hand: tell Claude "read `.git/claude-workflow/<slug>.md` and `~/.claude/mods/workflow/phases/<phase>.md`, then continue". The test lock and the gates are off until the mod is fixed.
