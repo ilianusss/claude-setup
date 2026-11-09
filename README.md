@@ -4,7 +4,7 @@ A Claude Code setup for fullstack and devops work; this repo is `~/.claude` itse
 
 ## Role in the system
 
-The setup loads four mods, all kept here: `warden`, which guards every session, `workflow`, which runs project workflows, `scribe`, which fixes typos in each prompt, and `shush`, which keeps chat replies short. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) repo is no longer used.
+The setup loads five mods, all kept here: `warden`, which guards every session, `workflow`, which runs project workflows, `scribe`, which fixes typos in each prompt, `shush`, which keeps chat replies short, and `skin`, which redraws the transcript in the colours of the `~/.theme` palette. The old standalone [claude-workflow](https://github.com/ilianusss/claude-workflow) and [claude-skin](https://github.com/ilianusss/claude-skin) repos are no longer used.
 
 ## Prerequisites
 
@@ -48,6 +48,7 @@ mods/warden/     every session: em dashes, safety asks, weakened tests, worktree
 mods/workflow/   the /workflow mod
 mods/scribe/     every prompt: typos and grammar fixed by Haiku
 mods/shush/      every prompt: short-answer rules for the reply
+mods/skin/       the transcript drawn in the ~/.theme palette
 docs/            how it works and how to change it
 ```
 
