@@ -37,6 +37,7 @@
 
 - End every task with: what was done, what was not and why, what could not be verified, every test changed and why, assumptions made, issues noticed outside the scope. Leave out the items that are empty.
 - A tiny change gets a one-line report instead.
+- A question or a discussion gets no report: it is not a task.
 
 ## Safety
 

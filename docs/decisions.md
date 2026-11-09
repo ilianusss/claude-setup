@@ -101,3 +101,11 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 - **`git` is excluded from rtk**: a session in a worktree refuses every `rtk git ...` command, and the rule puts most sessions in one. git output is no longer compressed.
 - **The em dash eval case grades the trace, not the file**: the eval sandbox's home is a git repo, so the worktree guard also refuses the corrected Write and no file is ever written. The case now checks warden's em dash refusal in the trace, like `force-push-asks`.
 - **The audit harness scores the worktree Claude entered, and the workflow fixture is a linked worktree**: otherwise `regress.sh` would score an untouched main checkout.
+
+
+## 2026-11-09: shush
+
+- **The caveman plugin's voice rules, not the plugin**: caveman also runs in subagents, writes one-line commits, compresses CLAUDE.md and filters tool output, which clash with full-prose handoffs, the git conventions and `rtk`. Only its reply rules were kept, without its dropped articles, which cost nuance and read badly.
+- **Rules attached to each prompt, not CLAUDE.md**: the CLAUDE.md line on reply length was loaded once, far from the turn, and held poorly. Hidden context beside each typed prompt sits next to the turn it governs.
+- **shush loads before scribe**: the first plugin in `CLAUDE_CODE_PLUGIN_DIRS` is the outermost hook. Loaded after scribe, a trailing `++` would reach Haiku first, which may drop it as stray punctuation, and the rules would come back on.
+- **No classifier**: the main model already knows a simple question from a design one, so a Haiku call to pick the mode would cost latency to answer what it knows. The rules carry their own exceptions, and `++` or `/shush off` cover the cases where the person knows better.

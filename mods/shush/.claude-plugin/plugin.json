@@ -1,0 +1,7 @@
+{
+  "name": "shush",
+  "version": "0.1.0",
+  "description": "Reminds Claude on each typed prompt to answer short and to the point, with ++ and /shush to ask for full detail.",
+  "author": { "name": "ilianusss" },
+  "types": "./types/index.d.ts"
+}

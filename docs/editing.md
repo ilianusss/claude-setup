@@ -34,7 +34,7 @@ A mod's tests run against Claude Code's own engine, which also enforces how a mo
 Before committing a change to a mod, run every mod's tests:
 
 ```sh
-claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow && claude plugin test ~/.claude/mods/scribe
+claude plugin test ~/.claude/mods/warden && claude plugin test ~/.claude/mods/workflow && claude plugin test ~/.claude/mods/scribe && claude plugin test ~/.claude/mods/shush
 ```
 
 ## Reloading
