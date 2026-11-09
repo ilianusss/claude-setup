@@ -19,7 +19,7 @@ A project without `.claude/workflow.json` starts with the setup phase, which wri
 | --- | --- |
 | `/workflow` | The workflows of this repo: phase, slice, status, age, which one is on the current branch |
 | `/workflow all` | Open workflows in every repo on this machine |
-| `/workflow new <title>` | Asks the size, whether to commit after each slice, and the branch (or a worktree when this checkout already runs one), then starts the first phase |
+| `/workflow new <title>` | Asks the size and whether to commit after each slice, then creates a worktree next to the repo on `feat/<slug>`, where you start a session and run `/workflow continue`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the first phase there |
 | `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named; offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
 | `/workflow next` | Clears the context, then continues: the one command between slices |
 | `/workflow pause` | Claude writes the handoff, then stops |
@@ -60,7 +60,7 @@ A phase can only write its own files: during the spec, a write to source code is
 
 ## Several workflows at once
 
-- One workflow, one branch. `/workflow new` offers a worktree next to the repo when this checkout already runs one; start a second session there.
+- One workflow, one branch, one worktree. `/workflow new` never works in the main checkout, which may hold your own changes; start a session in the worktree it creates.
 - The state lives in the repo's `.git`, shared by every worktree, so `/workflow` lists everything from anywhere.
 - ADRs are named by date, so two branches never collide on a number.
 

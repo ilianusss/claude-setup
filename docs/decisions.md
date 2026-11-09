@@ -90,3 +90,14 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 - **The fix is applied without asking, with a toast**: putting the correction back in the prompt box would cost an extra Enter on every prompt. The guards (length, protected spans, em dashes) and the toast make a silent rewrite safe enough.
 - **scribe fails open where warden fails closed**: a broken warden must not let a risky command through, but a broken scribe must not block or lose a prompt. Every failure sends the prompt as typed; the engine already skips a hook that throws, so the mod needs no `try/catch`.
 - **Haiku at low effort, 4 s timeout**: measured in headless runs at 0.9 to 1.8 s per call, the hook settling about 30 ms after the answer.
+
+## 2026-11-09: work in a worktree
+
+- **Changes in a git repo happen in a worktree**: the main checkout may hold the user's own uncommitted work, and a worktree keeps Claude's apart. CLAUDE.md names `EnterWorktree`, whose own description says to use it only when the user or CLAUDE.md asks.
+- **warden asks the person once per checkout instead of refusing outright**: some tasks continue the user's uncommitted work, which does not follow into a worktree. The dialog's "allow this checkout for this session" covers them; a dismissed dialog and a headless run refuse, so the guard fails closed.
+- **Shell changes are caught around each Bash command, by status and content hash, not around the turn**: a shell command cannot be read for the files it writes, and a hash catches a file the user had already changed when it changes again. A turn-wide comparison would blame Claude for the files the user saves in the main checkout while Claude works, which is the point of the worktree. The check is a note, so it fails open; the edit guard fails closed.
+- **`worktree.baseRef` is `head`**: the default `fresh` branches from `origin/<default branch>`, so a task on a feature branch would start without its commits.
+- **`/workflow new` always creates a worktree** except in a linked worktree that runs no workflow yet, which drops the "use this checkout anyway" choice.
+- **`git` is excluded from rtk**: a session in a worktree refuses every `rtk git ...` command, and the rule puts most sessions in one. git output is no longer compressed.
+- **The em dash eval case grades the trace, not the file**: the eval sandbox's home is a git repo, so the worktree guard also refuses the corrected Write and no file is ever written. The case now checks warden's em dash refusal in the trace, like `force-push-asks`.
+- **The audit harness scores the worktree Claude entered, and the workflow fixture is a linked worktree**: otherwise `regress.sh` would score an untouched main checkout.

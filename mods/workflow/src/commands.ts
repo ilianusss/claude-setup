@@ -6,7 +6,7 @@ import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
-import { ADOPT, BRANCH, COMMITS, RETRO, SIZE, SWITCH, WORKTREE } from './labels'
+import { ADOPT, BRANCH, COMMITS, RETRO, SIZE, SWITCH } from './labels'
 import { pausePrompt, phasePrompt, setupPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
@@ -58,14 +58,12 @@ async function all($: EngineInterface, now: number): Promise<string> {
 async function placement($: EngineInterface, session: Session, slug: string): Promise<{ branch: string; worktree: string; here: boolean }> {
   const { context } = session
   const branch = `feat/${slug}`
-  if (context.current !== undefined) {
-    const choice = await ask($, `This checkout runs "${context.current.slug}". Where should the new workflow go?`, [WORKTREE.create, WORKTREE.here], 'Checkout')
-    if (choice === WORKTREE.create) {
-      const folder = context.repo.root.split('/').pop() ?? 'repo'
-      const path = `${context.repo.root.slice(0, context.repo.root.length - folder.length)}${folder}-${slug}`
-      await addWorktree($, context.repo, branch, path)
-      return { branch, worktree: path, here: false }
-    }
+  // Work stays out of the main checkout, which may hold the person's own changes (CLAUDE.md, How to work).
+  if (!context.repo.isLinked || context.current !== undefined) {
+    const folder = context.repo.root.split('/').pop() ?? 'repo'
+    const path = `${context.repo.root.slice(0, context.repo.root.length - folder.length)}${folder}-${slug}`
+    await addWorktree($, context.repo, branch, path)
+    return { branch, worktree: path, here: false }
   }
   const options = isDefaultBranch(context.repo.branch)
     ? [BRANCH.create(branch), BRANCH.stay(context.repo.branch)]
