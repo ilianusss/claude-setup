@@ -20,7 +20,7 @@ How this setup is built, and why each instruction lives where it does. For using
 | `CLAUDE.md` | Every session | Always (about 45 lines) | Intent and rules that apply everywhere |
 | `skills/*` | Description always, body when relevant | About 400 characters each | Knowledge and procedures |
 | `agents/reviewer.md` | When spawned | A cold start each time | The fresh-context review, once per feature |
-| `mods/warden`, `mods/workflow`, `mods/scribe` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
+| `mods/warden`, `mods/workflow`, `mods/scribe`, `mods/shush` | At session start, through `CLAUDE_CODE_PLUGIN_DIRS` | Zero, except what they choose to send | Commands with logic, state, guards that need state, status display |
 | Permissions (`settings.json`) | Never in context | Zero | Hard limits that hold even if a mod fails |
 
 ## File map
@@ -34,6 +34,7 @@ How this setup is built, and why each instruction lives where it does. For using
 ├── mods/warden/           every session: em dashes, safety asks, test integrity
 ├── mods/workflow/         /workflow: phases, the test lock, gates
 ├── mods/scribe/           every prompt: typos and grammar fixed by Haiku
+├── mods/shush/            every prompt: short-answer rules for the reply
 └── docs/
 ```
 
@@ -65,7 +66,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 
 ## The mods
 
-All three are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
+All four are TypeScript modules for the Claude Code mod API (early access: it may change between releases), loaded from their folders through `CLAUDE_CODE_PLUGIN_DIRS`, and reloaded when their files change.
 
 **warden** applies to every session:
 
@@ -89,6 +90,14 @@ All three are TypeScript modules for the Claude Code mod API (early access: it m
 - the correction is dropped when its length moves more than 25% (an answer instead of a fix), when it changes a protected span (fenced or inline code, a URL, a path, an `@mention`), or when it adds an em dash;
 - a toast lists what changed (`scribe: teh → the`). The transcript stores the corrected text, so the toast is the only trace of the typed one;
 - it fails open: a timeout, an API error or a failed hook sends the prompt as typed. Each prompt costs one Haiku call and about a second.
+
+**shush** keeps chat replies short:
+
+- a `prompt.submit` hook attaches its rules (answer first, no preamble or recap, one idea per sentence, caveats and exact payload kept, full prose for risky or design work) as hidden context beside each prompt, so they sit next to the latest turn instead of only in CLAUDE.md;
+- only prompts the person typed (composer or Remote Control); slash commands, engine prompts, notifications and headless runs go without them, and subagents never see them because their prompts come from the Agent tool;
+- a prompt ending in a spaced `++` goes without the rules for that one reply, the `++` removed; `/shush off` and `/shush on`, obeyed only from the person, switch them for the session, with `shush: off` in the status line; every new session starts with them on;
+- listed before `scribe` in `CLAUDE_CODE_PLUGIN_DIRS`, so its hook runs first and strips the `++` before Haiku could drop it as punctuation;
+- no model call: about 300 tokens of context per typed prompt.
 
 The phase files, guides and templates are markdown inside the workflow mod. If the API breaks after an update, they still work by hand (see [editing.md](editing.md)).
 

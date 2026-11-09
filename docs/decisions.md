@@ -90,3 +90,10 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 - **The fix is applied without asking, with a toast**: putting the correction back in the prompt box would cost an extra Enter on every prompt. The guards (length, protected spans, em dashes) and the toast make a silent rewrite safe enough.
 - **scribe fails open where warden fails closed**: a broken warden must not let a risky command through, but a broken scribe must not block or lose a prompt. Every failure sends the prompt as typed; the engine already skips a hook that throws, so the mod needs no `try/catch`.
 - **Haiku at low effort, 4 s timeout**: measured in headless runs at 0.9 to 1.8 s per call, the hook settling about 30 ms after the answer.
+
+## 2026-11-09: shush
+
+- **The caveman plugin's voice rules, not the plugin**: caveman also runs in subagents, writes one-line commits, compresses CLAUDE.md and filters tool output, which clash with full-prose handoffs, the git conventions and `rtk`. Only its reply rules were kept, without its dropped articles, which cost nuance and read badly.
+- **Rules attached to each prompt, not CLAUDE.md**: the CLAUDE.md line on reply length was loaded once, far from the turn, and held poorly. Hidden context beside each typed prompt sits next to the turn it governs.
+- **shush loads before scribe**: the first plugin in `CLAUDE_CODE_PLUGIN_DIRS` is the outermost hook. Loaded after scribe, a trailing `++` would reach Haiku first, which may drop it as stray punctuation, and the rules would come back on.
+- **No classifier**: the main model already knows a simple question from a design one, so a Haiku call to pick the mode would cost latency to answer what it knows. The rules carry their own exceptions, and `++` or `/shush off` cover the cases where the person knows better.
