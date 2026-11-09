@@ -3,6 +3,7 @@ import type { Register } from 'claude-code'
 import { integrityState, registerIntegrity, weakeningsAtTurnStart } from '../src/integrity'
 import { registerSafety } from '../src/safety'
 import { emDashesAtTurnStart, registerTypography, type TypographyState } from '../src/typography'
+import { registerWorktree, worktreeState } from '../src/worktree'
 
 export const register: Register = on => {
   const typography: TypographyState = { emDashesAtTurnStart: new Map() }
@@ -10,6 +11,7 @@ export const register: Register = on => {
   registerTypography(on, typography)
   registerSafety(on)
   registerIntegrity(on, integrity)
+  registerWorktree(on, worktreeState())
 
   // A plugin registers turn.start once, so both checks take their snapshot here.
   on('turn.start', async ($, e, next) => {
