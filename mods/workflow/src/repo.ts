@@ -1,6 +1,6 @@
 import type { EngineInterface, ProcessRunResult } from 'claude-code'
 
-export type Repo = { root: string; commonDir: string; branch: string }
+export type Repo = { root: string; commonDir: string; branch: string; isLinked: boolean }
 
 const DEFAULT_BRANCHES = ['main', 'master', 'trunk', 'develop', 'HEAD']
 
@@ -21,12 +21,12 @@ function lines(text: string): string[] {
 }
 
 export async function findRepo($: EngineInterface, cwd: string): Promise<Repo | undefined> {
-  const paths = await git($, cwd, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir'])
+  const paths = await git($, cwd, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir', '--git-dir'])
   if (paths.exitCode !== 0) return undefined
-  const [root, commonDir] = lines(paths.stdout)
-  if (root === undefined || commonDir === undefined) return undefined
+  const [root, commonDir, gitDir] = lines(paths.stdout)
+  if (root === undefined || commonDir === undefined || gitDir === undefined) return undefined
   const head = await git($, root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
-  return { root, commonDir, branch: head.exitCode === 0 ? head.stdout.trim() : 'HEAD' }
+  return { root, commonDir, branch: head.exitCode === 0 ? head.stdout.trim() : 'HEAD', isLinked: gitDir !== commonDir }
 }
 
 export function isDefaultBranch(branch: string): boolean {

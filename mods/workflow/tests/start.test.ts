@@ -7,8 +7,9 @@ import { CONFIG, DAY, NOW, ROOT, STATE_DIR, fakeEngine, run, start, stateText } 
 const WITH_CONFIG = { [`${ROOT}/.claude/workflow.json`]: JSON.stringify(CONFIG) }
 
 describe('/workflow new', () => {
-  test('asks the size, commits and branch, writes the state and starts the first phase', async ($, on) => {
+  test('in a free linked worktree, asks the size, commits and branch, writes the state and starts the first phase', async ($, on) => {
     const fake = fakeEngine(on, WITH_CONFIG)
+    fake.isLinked = true
     fake.answers.push(SIZE.feature, COMMITS.yes, BRANCH.create('feat/add-login'))
     await start($)
 
@@ -26,12 +27,42 @@ describe('/workflow new', () => {
 
   test('starts with the setup phase when the project has no workflow.json', async ($, on) => {
     const fake = fakeEngine(on)
+    fake.isLinked = true
     fake.answers.push(SIZE.project, COMMITS.no, BRANCH.stay('main'))
     await start($)
 
     await run($, 'new Billing')
 
     expect(parseWorkflow(fake.files.get(`${STATE_DIR}/billing.md`) ?? '')).toMatchObject({ phase: 'setup', size: 'project', branch: 'main' })
+  })
+
+  test('in the main checkout, creates a worktree next to the repo without asking for a branch', async ($, on) => {
+    const fake = fakeEngine(on, WITH_CONFIG)
+    fake.answers.push(SIZE.feature, COMMITS.yes)
+    await start($)
+
+    const ran = await run($, 'new Add login')
+    await fake.clock.settle()
+
+    const state = parseWorkflow(fake.files.get(`${STATE_DIR}/add-login.md`) ?? '')
+    expect(state).toMatchObject({ branch: 'feat/add-login', worktree: `${ROOT}-add-login` })
+    expect(fake.questions).toHaveLength(2)
+    expect(fake.branch).toBe('main')
+    expect(fake.prompts).toHaveLength(0)
+    expect(ran.text).toContain(`new worktree ${ROOT}-add-login`)
+  })
+
+  test('in a linked worktree that runs a workflow, creates another worktree without asking for a branch', async ($, on) => {
+    const fake = fakeEngine(on, { ...WITH_CONFIG, [`${STATE_DIR}/login.md`]: stateText() }, 'feat/login')
+    fake.isLinked = true
+    fake.answers.push(SIZE.feature, COMMITS.no)
+    await start($)
+
+    const ran = await run($, 'new Billing')
+
+    expect(parseWorkflow(fake.files.get(`${STATE_DIR}/billing.md`) ?? '')).toMatchObject({ branch: 'feat/billing', worktree: `${ROOT}-billing` })
+    expect(fake.questions).toHaveLength(2)
+    expect(ran.text).toContain(`new worktree ${ROOT}-billing`)
   })
 
   test('creates nothing when a dialog is dismissed', async ($, on) => {
