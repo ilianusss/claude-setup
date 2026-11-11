@@ -10,6 +10,10 @@ import type { Repo } from './repo'
 import { refreshStatus } from './status'
 import { readLock } from './store'
 
+function allowedWrites(scope: readonly string[]): string {
+  return scope.length > 0 ? `may only write ${scope.join(', ')}` : 'writes no file in the repo'
+}
+
 async function writeRefusal($: EngineInterface, path: string): Promise<string | undefined> {
   const context = await loadContext($)
   if (context === undefined) return undefined
@@ -37,8 +41,8 @@ async function writeRefusal($: EngineInterface, path: string): Promise<string | 
   } catch {
     return undefined
   }
-  if (scope.length > 0 && !matchesAny(file, scope)) {
-    return `workflow: the ${workflow.phase} phase of "${workflow.slug}" may only write ${scope.join(', ')}. Code starts in the build phase; if this change is needed now, ask the user.`
+  if (!matchesAny(file, scope)) {
+    return `workflow: the ${workflow.phase} phase of "${workflow.slug}" ${allowedWrites(scope)}. Code starts in the build phase; if this change is needed now, ask the user.`
   }
   return undefined
 }
@@ -51,7 +55,7 @@ async function watchScope($: EngineInterface): Promise<ScopeWatch | undefined> {
     const workflow = context?.current
     if (context === undefined || workflow === undefined || workflow.status !== 'active') return undefined
     const scope = writeScope(await readPhase($, workflow.phase), workflow, context.config?.specsDir ?? DEFAULT_SPECS_DIR)
-    if (scope.length === 0 || scope.includes('**')) return undefined
+    if (scope.includes('**')) return undefined
     const tree = await treeHash($, context.repo, context.paths.treeIndex)
     return { repo: context.repo, indexFile: context.paths.treeIndex, phase: workflow.phase, scope, tree }
   } catch {
@@ -67,7 +71,7 @@ async function scopeNotes($: EngineInterface, watch: ScopeWatch): Promise<string
     const outside = changed.stdout.split('\n').filter(file => file.length > 0 && !matchesAny(file, watch.scope))
     if (outside.length === 0) return []
     return [
-      `workflow: this command changed ${outside.join(', ')}, outside what the ${watch.phase} phase may write (${watch.scope.join(', ')}). Undo it unless the user asked for it: code starts in the build phase.`,
+      `workflow: this command changed ${outside.join(', ')}, and the ${watch.phase} phase ${allowedWrites(watch.scope)}. Undo it unless the user asked for it: code starts in the build phase.`,
     ]
   } catch {
     return []

@@ -98,7 +98,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
       : 'cancelled, nothing was created.'
   }
 
-  const phase = firstPhase(size, context.config === undefined)
+  const phase: Phase = 'intake'
   const workflow: Workflow = {
     slug,
     title,

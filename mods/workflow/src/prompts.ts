@@ -87,6 +87,20 @@ function buildAgent(workflow: Workflow): string {
   ].join('\n')
 }
 
+const INTAKE_STEPS = [
+  '## The intake steps',
+  '',
+  '1. **Ask** the user, in their words:',
+  '   - The problem: what is wrong or missing today, and for whom.',
+  '   - The result wanted: what exists once this workflow is done.',
+  '   - How success will show: what the user will see, run or measure to know it worked.',
+  '   - The limits: time, technology, compatibility, and what must not change.',
+  '   - Out of scope: what this workflow will not do.',
+  '2. **Restate** your understanding in a few lines, one per point above, and ask the user to confirm it or correct it. Restate again after each correction, until they confirm.',
+  '3. **Save.** Call mcp__workflow__handoff with `goal` set to the confirmed restatement, and the next action.',
+  '4. **Gate.** Call mcp__workflow__advance with the confirmed restatement as the summary.',
+].join('\n')
+
 function joined(parts: ReadonlyArray<string | undefined>): string {
   return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
 }
@@ -103,6 +117,7 @@ export async function phasePrompt(
     ...header(workflow),
     drift,
     doc.body,
+    workflow.phase === 'intake' ? INTAKE_STEPS : undefined,
     workflow.phase === 'build' ? buildAgent(workflow) : undefined,
     standing(workflow),
     files($, specs),

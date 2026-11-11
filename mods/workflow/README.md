@@ -13,7 +13,7 @@ It is one of the two mods of the `~/.claude` setup, next to `warden`, loaded thr
 
 ## Getting started
 
-In a repo, type `/workflow new <title>`. A project without `.claude/workflow.json` starts with the setup phase, which writes it.
+In a repo, type `/workflow new <title>`. Every workflow starts with an intake, where Claude asks what you want; a project without `.claude/workflow.json` then goes through the setup phase, which writes it.
 
 ## Commands
 

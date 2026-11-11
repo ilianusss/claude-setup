@@ -23,7 +23,7 @@ Design: Problem and acceptance criteria, Decision, Components, Data model, Secur
 Depends on: none
 
 ## Slice 2: The intake phase
-- [ ] Done
+- [x] Done
 
 Goal: every workflow starts by asking the user what they want and saving it as the goal.
 Acceptance criteria:

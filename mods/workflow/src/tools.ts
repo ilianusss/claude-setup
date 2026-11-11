@@ -30,6 +30,10 @@ const TOOLS: readonly RegisteredToolSpec[] = [
           items: { type: 'string' },
           description: 'The folders this workflow touches, relative to the repo root. Set it in the design phase; the drift check watches them.',
         },
+        goal: {
+          type: 'string',
+          description: 'The goal the user confirmed in the intake, as restated to them. Accepted in the intake phase only.',
+        },
       },
       required: ['stopped', 'next'],
     },
@@ -99,8 +103,13 @@ function currentOf(context: Context): Workflow {
 
 async function handoff($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
   const workflow = currentOf(context)
+  const hasGoal = input.goal !== undefined
+  if (hasGoal && workflow.phase !== 'intake') {
+    refuse(`the goal is set in the intake phase only, and "${workflow.slug}" is in its ${workflow.phase} phase: call mcp__workflow__handoff again without it.`)
+  }
   await saveWorkflow($, context.repo, context.paths, {
     ...workflow,
+    goal: hasGoal ? textInput(input, 'goal') : workflow.goal,
     stopped: textInput(input, 'stopped'),
     next: textInput(input, 'next'),
     questions: listInput(input, 'questions') ?? [],
@@ -116,7 +125,7 @@ async function advance($: EngineInterface, context: Context, summary: string, no
     refuse('the build phase moves on by itself: each slice closes with mcp__workflow__verify, and the last one moves the workflow to inspect.')
   }
   if (workflow.phase === 'done') refuse(`the workflow "${workflow.slug}" is done.`)
-  const target = phaseAfter(workflow.size, workflow.phase)
+  const target = phaseAfter(workflow.size, workflow.phase, context.config === undefined)
   let slice = workflow.slice
   if (target === 'build') {
     const open = (await readSlices($, context, workflow)).find(candidate => !candidate.done)

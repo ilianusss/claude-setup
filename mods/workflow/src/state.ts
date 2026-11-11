@@ -3,7 +3,7 @@ import type { Frontmatter } from './frontmatter'
 import { parsePlan, renderPlan } from './plan'
 import type { ModelPlan } from './plan'
 
-export const PHASES = ['setup', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'] as const
+export const PHASES = ['intake', 'setup', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'] as const
 export type Phase = (typeof PHASES)[number]
 export type Size = 'feature' | 'project'
 export type Status = 'active' | 'paused' | 'done' | 'abandoned'
@@ -11,8 +11,8 @@ export type Status = 'active' | 'paused' | 'done' | 'abandoned'
 const SIZES: readonly Size[] = ['feature', 'project']
 const STATUSES: readonly Status[] = ['active', 'paused', 'done', 'abandoned']
 const SEQUENCES: Readonly<Record<Size, readonly Phase[]>> = {
-  feature: ['design', 'slice', 'build', 'inspect', 'done'],
-  project: ['spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
+  feature: ['intake', 'design', 'slice', 'build', 'inspect', 'done'],
+  project: ['intake', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
 }
 const LOG_LENGTH = 10
 const SLUG_WORDS = 5
@@ -156,15 +156,16 @@ export function renderWorkflow(workflow: Workflow): string {
   return renderFrontmatter(data, body)
 }
 
-export function phaseAfter(size: Size, phase: Phase): Phase {
+export function phaseAfter(size: Size, phase: Phase, needsSetup = false): Phase {
+  if (phase === 'intake' && needsSetup) return 'setup'
   const sequence = SEQUENCES[size]
-  if (phase === 'setup') return sequence[0] ?? 'done'
-  const index = sequence.indexOf(phase)
+  const index = sequence.indexOf(phase === 'setup' ? 'intake' : phase)
   return index < 0 ? 'done' : (sequence[index + 1] ?? 'done')
 }
 
+// The first phase of the work itself: every workflow starts with the intake, which leads here.
 export function firstPhase(size: Size, needsSetup: boolean): Phase {
-  return needsSetup ? 'setup' : (SEQUENCES[size][0] ?? 'done')
+  return phaseAfter(size, 'intake', needsSetup)
 }
 
 export function slugify(title: string): string {

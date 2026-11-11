@@ -4,7 +4,7 @@ export {}
 
 declare module 'claude-code' {
   interface McpToolInputs {
-    mcp__workflow__handoff: { stopped: string; next: string; questions?: string[]; paths?: string[] }
+    mcp__workflow__handoff: { stopped: string; next: string; questions?: string[]; paths?: string[]; goal?: string }
     mcp__workflow__advance: { summary: string }
     mcp__workflow__lock: {}
     mcp__workflow__verify: {}

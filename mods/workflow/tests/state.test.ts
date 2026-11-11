@@ -96,6 +96,14 @@ describe('phases', () => {
     expect(firstPhase('project', false)).toBe('spec')
     expect(phaseAfter('project', 'setup')).toBe('spec')
   })
+
+  test('setup comes right after the intake only when the project has no workflow.json', () => {
+    expect(phaseAfter('feature', 'intake', true)).toBe('setup')
+    expect(phaseAfter('feature', 'intake', false)).toBe('design')
+    expect(phaseAfter('project', 'intake', false)).toBe('spec')
+    expect(phaseAfter('feature', 'setup')).toBe('design')
+    expect(phaseAfter('project', 'setup')).toBe('spec')
+  })
 })
 
 describe('slugify', () => {

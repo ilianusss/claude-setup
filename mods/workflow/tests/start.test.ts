@@ -17,15 +17,15 @@ describe('/workflow new', () => {
     await fake.clock.settle()
 
     const state = parseWorkflow(fake.files.get(`${STATE_DIR}/add-login.md`) ?? '')
-    expect(state).toMatchObject({ slug: 'add-login', size: 'feature', phase: 'design', branch: 'feat/add-login', commits: true })
+    expect(state).toMatchObject({ slug: 'add-login', size: 'feature', phase: 'intake', branch: 'feat/add-login', commits: true })
     expect(fake.branch).toBe('feat/add-login')
     expect(fake.tools).toContain('mcp__workflow__lock')
     expect(ran.text).toContain('add-login')
     expect(fake.prompts).toHaveLength(1)
-    expect(fake.prompts[0]).toContain('The design phase')
+    expect(fake.prompts[0]).toContain('The intake phase')
   })
 
-  test('starts with the setup phase when the project has no workflow.json', async ($, on) => {
+  test('starts with the intake even when the project has no workflow.json', async ($, on) => {
     const fake = fakeEngine(on)
     fake.isLinked = true
     fake.answers.push(SIZE.project, COMMITS.no, BRANCH.stay('main'))
@@ -33,7 +33,7 @@ describe('/workflow new', () => {
 
     await run($, 'new Billing')
 
-    expect(parseWorkflow(fake.files.get(`${STATE_DIR}/billing.md`) ?? '')).toMatchObject({ phase: 'setup', size: 'project', branch: 'main' })
+    expect(parseWorkflow(fake.files.get(`${STATE_DIR}/billing.md`) ?? '')).toMatchObject({ phase: 'intake', size: 'project', branch: 'main' })
   })
 
   test('in the main checkout, creates a worktree next to the repo without asking for a branch', async ($, on) => {
@@ -138,7 +138,7 @@ describe('status', () => {
 
     const ran = await run($, 'all')
 
-    expect(ran.text).toContain(`${ROOT}: add-login (design)`)
+    expect(ran.text).toContain(`${ROOT}: add-login (intake)`)
   })
 
   test('/workflow all drops the workflows of a repo that no longer exists', async ($, on) => {

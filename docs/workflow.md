@@ -8,10 +8,10 @@ How to run a piece of work from idea to pull request with `/workflow`. The desig
 | --- | --- | --- |
 | Tiny | Typo, config value, dependency bump | Just ask |
 | Small | Bug fix, one-slice feature | A plain session: CLAUDE.md triggers `writing-tests-first`, plan mode if there is a design choice |
-| Feature | Several slices in an existing project | `/workflow new`, size Feature: design, slice, build, inspect |
-| Project | A new product, a large feature | `/workflow new`, size Project: spec, design, slice, build, inspect, retro |
+| Feature | Several slices in an existing project | `/workflow new`, size Feature: intake, design, slice, build, inspect |
+| Project | A new product, a large feature | `/workflow new`, size Project: intake, spec, design, slice, build, inspect, retro |
 
-A project without `.claude/workflow.json` starts with the setup phase, which writes it.
+Every workflow starts with the intake, where Claude asks what you want. In a project without `.claude/workflow.json`, the setup phase, which writes it, comes right after the intake.
 
 ## Commands
 
@@ -34,6 +34,7 @@ The status line shows the workflow on the current branch: `workflow login: build
 
 | Phase | Claude writes | You approve |
 | --- | --- | --- |
+| intake | No file: it asks the problem, the result you want, how success will show, the limits and what is out of scope, restates it, and saves the goal you confirm in the state | The restated goal |
 | setup | `.claude/workflow.json`, the project CLAUDE.md and settings, after running each command once | The three files |
 | spec | `docs/specs/<slug>/spec.md`: problem, users, scope, acceptance criteria in EARS, abuse cases | The spec, with no open question left |
 | design | `design.md`: drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
@@ -42,7 +43,7 @@ The status line shows the workflow on the current branch: `workflow login: build
 | inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
-A phase can only write its own files: during the spec, a write to source code is refused. Claude moves a phase on with a dialog you answer (Approve or Not yet); auto mode cannot answer it.
+A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer (Approve or Not yet); auto mode cannot answer it.
 
 ## A slice, step by step
 
