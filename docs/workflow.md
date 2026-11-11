@@ -20,8 +20,8 @@ Every workflow starts with the intake, where Claude asks what you want. In a pro
 | `/workflow` | The workflows of this repo: phase, slice, status, age, which one is on the current branch |
 | `/workflow all` | Open workflows in every repo on this machine |
 | `/workflow new <title>` | Asks the size, whether to commit after each slice and whether to start the next slice without asking (`auto_next`), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
-| `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named; offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
-| `/workflow next` | Clears the context, then continues: the one command between slices |
+| `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named, with the prompt of the phase it stopped in (after a "Stop here", for one); offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
+| `/workflow next` | Clears the context, then continues: only needed to resume by hand in a fresh context, since gates and slices go on by themselves |
 | `/workflow pause` | Claude writes the handoff, then stops |
 | `/workflow unlock <file> <reason>` | You unlock a locked test yourself |
 | `/workflow done <slug>` | Closes it; a project is offered its retro first |
@@ -39,11 +39,11 @@ The status line shows the workflow on the current branch: `workflow login: build
 | spec | `docs/specs/<slug>/spec.md`: problem, users, scope, acceptance criteria in EARS, abuse cases | The spec, with no open question left |
 | design | `design.md`: drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
 | slice | `slices.md`: a walking skeleton first, then one behaviour per slice | The slices and their criteria |
-| build | Code and tests, one slice per session, in the `workflow:build` agent | Nothing: each slice closes when the mod has seen it green |
+| build | Code and tests, one `workflow:build` agent run per slice | Nothing: each slice closes when the mod has seen it green |
 | inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
-A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer (Approve or Not yet); auto mode cannot answer it.
+A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. "Continue" moves the phase and Claude goes straight on with the next one in the same conversation; "Stop here" moves it and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance` and `mcp__workflow__handoff`: the mod refuses both from a step agent.
 
 ## A slice, step by step
 
@@ -54,12 +54,12 @@ The conversation spawns the `workflow:build` agent for the slice and relays its 
 3. Red: Claude asks the mod to lock; the mod answers with the exact command to run, and locks only after it saw that command fail on the current code.
 4. Green: the tests are frozen. Claude implements, then runs the slice tests, lint, typecheck and the full suite exactly as the mod listed them.
 5. The real thing: the app, the route, the screen.
-6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice and commits if you said so; the conversation writes the handoff.
-7. Claude stops. You type `/workflow next` for the next slice, in a fresh context.
+6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice, commits if you said so, and reports verify's answer, whose last part tells the conversation what comes next.
+7. The conversation writes the handoff and goes on: it spawns `workflow:build` again for the next slice, or stops when you said so, or, after the last slice, starts the inspect phase, whose prompt verify's answer carries.
 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
 
-**`auto_next`**: with `auto_next: yes` in the state file, the next slice starts by itself after a verified one. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
+**`auto_next`**: with `auto_next: yes` in the state file, verify tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
 
 ## Several workflows at once
 

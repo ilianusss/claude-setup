@@ -113,7 +113,7 @@ The phase files, guides and templates are markdown inside the workflow mod. If t
 What costs on a subscription: every turn resends the whole context; every agent is a cold start; verbose command output (reduced by `rtk`); high effort. Hence:
 
 - no agents inside the slice cycle, one reviewer per feature;
-- one slice per session, with `/workflow next` clearing the context;
+- one `workflow:build` agent run per slice, so each slice starts from a fresh context while the conversation chains the slices without clearing;
 - the mod's bookkeeping and status line cost nothing;
 - nothing workflow-related is loaded in a repo without a workflow;
 - spec, design, slice and inspect are reasoning-heavy (Opus, high effort); the build is well specified by then (Sonnet, or Opus at medium effort);

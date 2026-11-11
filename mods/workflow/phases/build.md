@@ -3,15 +3,15 @@ writes: ["**"]
 ---
 # The build phase
 
-Goal: the current slice, built test-first, with its tests locked between red and green. One slice per session. The work runs in the `workflow:build` agent, on the build model and effort of this workflow's plan; you stay with the user.
+Goal: the current slice, built test-first, with its tests locked between red and green. One slice per agent run. The work runs in the `workflow:build` agent, on the build model and effort of this workflow's plan; you stay with the user.
 
 ## With the user
 
 1. **Spawn.** Spawn `workflow:build` for the current slice, as the build agent section below says, and wait for its report. Do not write the tests or the code yourself.
 2. **Relay.** Give the user its report: what it built, each check and its result, the answer of `mcp__workflow__verify`, and its open questions.
 3. **Questions.** When the agent stopped on a test it believes wrong, put its evidence to the user and call `mcp__workflow__unlock` with the reason: the user decides. When it stopped on another question, ask the user, then spawn it again with the answer.
-4. **Close.** Once verify passed, check that the agent ticked the slice in `slices.md` (and committed, if this workflow commits), then call `mcp__workflow__handoff` with where things stand and the next action.
-5. **Stop.** One slice per session. Tell the user that `/workflow next` starts the next slice in a fresh context.
+4. **Close.** Once verify passed, check that the agent ticked the slice in `slices.md` (and committed, if this workflow commits).
+5. **Next.** Do what the "Next, for the conversation" part of verify's answer says: spawn `workflow:build` again for the next slice, or call `mcp__workflow__handoff` and stop, or go on with the inspect phase it carries. The mod has already asked the user when this workflow does not chain slices.
 
 ## Agent
 
@@ -25,7 +25,7 @@ Follow the steps in order. The mod enforces steps 4, 5 and 8.
 6. **Exercise the real thing** when the slice has a runnable surface: start the app, call the route, open the screen in a browser at mobile and desktop widths.
 7. **Self-check.** Each acceptance criterion maps to a passing test that asserts behaviour, not a call on a mock. Go through "Before calling it done" in `writing-clean-code` and `writing-secure-code`.
 8. **Verify.** Call `mcp__workflow__verify`. It closes the slice once it has seen every check pass on the current code, and lists what is left: tick the slice in `slices.md`, and commit if this workflow commits. The handoff is the conversation's: leave it out.
-9. **Report.** One slice per run: stop after verify and report.
+9. **Report.** One slice per run: stop after verify and report, with verify's answer whole in it, since the conversation acts on its last part.
 
 When stuck: after 3 real attempts on a red test, or as soon as a test looks wrong, stop and report with evidence (`writing-tests-first`, "The way out"). A locked test changes only after an unlock, which the user answers through the conversation.
 

@@ -8,9 +8,10 @@ import { readSlices, specsFolder } from './context'
 import type { Context } from './context'
 import { matchesAny } from './glob'
 import { sha256 } from './hash'
-import { UNLOCK } from './labels'
+import { NEXT_SLICE, UNLOCK } from './labels'
 import { latestRun, removedLines } from './lock'
 import type { Lock, LockedFile } from './lock'
+import { phasePrompt, spawnBuild, stopPrompt } from './prompts'
 import { refuse } from './refusal'
 import { changedFiles, relativeTo, treeHash } from './repo'
 import { addRun, readLock, readRuns, saveLock, saveWorkflow } from './store'
@@ -156,7 +157,7 @@ export async function verifySlice(
   $: EngineInterface,
   context: Context,
   now: number,
-): Promise<{ text: string; chainNext: boolean }> {
+): Promise<string> {
   const workflow = inBuild(context)
   const config = configOf(context)
   const lock = await readLock($, context.paths, workflow.slug)
@@ -199,22 +200,31 @@ export async function verifySlice(
   const advanced: Workflow = isLast ? { ...workflow, phase: 'inspect' } : { ...workflow, slice: workflow.slice + 1 }
   await saveWorkflow($, context.repo, context.paths, withLog({ ...advanced, updated: iso(now) }, day(now), `slice ${workflow.slice} verified`))
 
-  const nextStep = isLast
-    ? 'Every slice is done: tell the user that /workflow next starts the inspect phase in a fresh context.'
-    : workflow.autoNext
-      ? `Slice ${workflow.slice + 1} starts by itself in a fresh context once this turn ends.`
-      : `Tell the user that /workflow next starts slice ${workflow.slice + 1} in a fresh context.`
-  const text = [
+  return [
     `Slice ${workflow.slice} verified.`,
     '',
     `1. Tick slice ${workflow.slice} in \`${specsFolder(context, workflow)}/slices.md\`.`,
     workflow.commits
       ? '2. Commit the slice, following the following-git-conventions skill.'
       : '2. Do not commit: in this workflow the user commits.',
-    '3. Call mcp__workflow__handoff with where things stand and the next action.',
-    `4. ${nextStep}`,
+    '3. If you are the build agent, stop after these steps and put this whole answer in your report: what follows is for the conversation.',
+    '',
+    '## Next, for the conversation',
+    '',
+    await nextStep($, context, advanced),
   ].join('\n')
-  return { text, chainNext: !isLast && workflow.autoNext }
+}
+
+async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<string> {
+  if (advanced.phase === 'inspect') {
+    return `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`
+  }
+  if (advanced.autoNext) return `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}`
+  const answer = await askOrUndefined($, NEXT_SLICE.question(advanced.slug, advanced.slice - 1), [NEXT_SLICE.start(advanced.slice), NEXT_SLICE.stop], 'Next slice')
+  if (answer === NEXT_SLICE.start(advanced.slice)) {
+    return `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}`
+  }
+  return `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}`
 }
 
 export async function unlockFile(

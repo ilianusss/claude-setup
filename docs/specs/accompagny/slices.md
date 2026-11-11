@@ -56,7 +56,7 @@ Design: Problem and acceptance criteria, Components, Key flows
 Depends on: Slice 2
 
 ## Slice 4: Gates continue, slices chain
-- [ ] Done
+- [x] Done
 
 Goal: approving a phase or verifying a slice moves on in the same conversation, unless the user says stop.
 Acceptance criteria:

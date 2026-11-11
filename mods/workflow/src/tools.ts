@@ -7,6 +7,7 @@ import { day, iso } from './clock'
 import { loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { GATE } from './labels'
+import { phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import type { Runtime } from './runtime'
 import { phaseAfter, withLog } from './state'
@@ -136,18 +137,21 @@ async function advance($: EngineInterface, context: Context, summary: string, no
   const answer = await askOrUndefined(
     $,
     `Approve the ${workflow.phase} phase of "${workflow.slug}" and move to ${target}?\n\n${summary}`,
-    [GATE.approve, GATE.wait],
+    [GATE.approve, GATE.stop, GATE.wait],
     'Gate',
   )
   if (answer === undefined) return `The user closed the dialog: "${workflow.slug}" stays in its ${workflow.phase} phase.`
-  if (answer !== GATE.approve) return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
+  if (answer !== GATE.approve && answer !== GATE.stop) {
+    return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
+  }
 
   const moved: Workflow = { ...workflow, phase: target, slice, status: target === 'done' ? 'done' : workflow.status, updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, withLog(moved, day(now), `${workflow.phase} approved`))
   await refreshStatus($)
   await registerAgents($)
   if (target === 'done') return `Approved: "${workflow.slug}" is done.`
-  return `Approved: "${workflow.slug}" is now in its ${target} phase. Call mcp__workflow__handoff with the next action, then tell the user that /workflow next starts ${target} in a fresh context.`
+  if (answer === GATE.stop) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
+  return `Approved: "${workflow.slug}" is now in its ${target} phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`
 }
 
 type ToolAnswer = { result: string } | { deny: string }
@@ -191,13 +195,11 @@ async function lockTool($: EngineInterface): Promise<ToolAnswer> {
   }
 }
 
-async function verifyTool($: EngineInterface, runtime: Runtime): Promise<ToolAnswer> {
+async function verifyTool($: EngineInterface): Promise<ToolAnswer> {
   try {
-    const context = await contextOf($)
-    const verified = await verifySlice($, context, await $.clock.now())
-    if (verified.chainNext) runtime.pendingNext = context.current?.slug
+    const verified = await verifySlice($, await contextOf($), await $.clock.now())
     await registerAgents($)
-    return await answered($, verified.text)
+    return await answered($, verified)
   } catch (error) {
     return failure(error)
   }
@@ -216,10 +218,18 @@ function inputOf(e: unknown): Record<string, unknown> {
   return typeof e === 'object' && e !== null ? (e as Record<string, unknown>) : {}
 }
 
-export function registerToolHandlers(on: On, runtime: Runtime): void {
-  on('tool.call', { tool: 'mcp__workflow__handoff' }, ($, e) => handoffTool($, inputOf(e)))
-  on('tool.call', { tool: 'mcp__workflow__advance' }, ($, e) => advanceTool($, inputOf(e)))
+function refusedInStepAgent(tool: string): ToolAnswer {
+  return { deny: `workflow: ${tool} is refused in a step agent: only the conversation moves the workflow and hands it off. Put what it needs in your report.` }
+}
+
+export function registerToolHandlers(on: On): void {
+  on('tool.call', { tool: 'mcp__workflow__handoff' }, ($, e) =>
+    e.agentId === undefined ? handoffTool($, inputOf(e)) : refusedInStepAgent(e.tool),
+  )
+  on('tool.call', { tool: 'mcp__workflow__advance' }, ($, e) =>
+    e.agentId === undefined ? advanceTool($, inputOf(e)) : refusedInStepAgent(e.tool),
+  )
   on('tool.call', { tool: 'mcp__workflow__lock' }, $ => lockTool($))
-  on('tool.call', { tool: 'mcp__workflow__verify' }, $ => verifyTool($, runtime))
+  on('tool.call', { tool: 'mcp__workflow__verify' }, $ => verifyTool($))
   on('tool.call', { tool: 'mcp__workflow__unlock' }, ($, e) => unlockTool($, inputOf(e)))
 }

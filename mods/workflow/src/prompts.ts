@@ -78,13 +78,13 @@ function header(workflow: Workflow): string[] {
   ]
 }
 
-function buildAgent(workflow: Workflow): string {
+export function spawnBuild(workflow: Workflow): string {
   const { model, effort } = workflow.models.build
-  return [
-    '## The build agent',
-    '',
-    `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks below. Wait for it, then relay its report to the user: what it built, each check and its result, the answer of mcp__workflow__verify, and its open questions.`,
-  ].join('\n')
+  return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks. Wait for it, then relay its report to the user: what it built, each check and its result, the answer of mcp__workflow__verify, and its open questions.`
+}
+
+function buildAgent(workflow: Workflow): string {
+  return ['## The build agent', '', spawnBuild(workflow)].join('\n')
 }
 
 const INTAKE_STEPS = [
@@ -160,4 +160,8 @@ export function enterWorktreePrompt(workflow: Workflow, intake: string): string 
 
 export function pausePrompt(workflow: Workflow): string {
   return `Pause the workflow \`${workflow.slug}\`: call mcp__workflow__handoff now with where you stopped, the next concrete action and any open questions. Then stop and tell the user it is paused and how to resume (\`/workflow continue ${workflow.slug}\`).`
+}
+
+export function stopPrompt(workflow: Workflow): string {
+  return `Call mcp__workflow__handoff now with where things stand and the next action. Then stop and tell the user that \`/workflow continue ${workflow.slug}\` picks the workflow up from here.`
 }

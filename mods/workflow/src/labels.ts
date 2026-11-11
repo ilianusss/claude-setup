@@ -16,6 +16,12 @@ export const CHAINING = {
   no: 'No, ask me after each slice',
 }
 
+export const NEXT_SLICE = {
+  question: (slug: string, verified: number) => `Slice ${verified} of "${slug}" is verified. Start slice ${verified + 1} now?`,
+  start: (slice: number) => `Start slice ${slice}`,
+  stop: 'Stop here',
+}
+
 export const BRANCH = {
   create: (branch: string) => `Create ${branch}`,
   stay: (branch: string) => `Stay on ${branch}`,
@@ -26,7 +32,7 @@ export const SWITCH = {
   no: 'Cancel',
 }
 
-export const GATE = { approve: 'Approve', wait: 'Not yet' }
+export const GATE = { approve: 'Continue', stop: 'Stop here', wait: 'Not yet' }
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }
