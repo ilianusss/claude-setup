@@ -5,7 +5,7 @@ Keep this format: the workflow mod reads the `## Slice N:` headings, the `- [ ] 
 Numbers in parentheses point to the acceptance criteria of `design.md`. Each slice updates `docs/workflow.md` (and `docs/architecture.md` when a mechanism changes) for what it adds.
 
 ## Slice 1: Walking skeleton: the build runs in a registered agent
-- [ ] Done
+- [x] Done
 
 Goal: the riskiest part first. A workflow has a model plan, the mod registers `workflow:build` with the plan's model and effort, the build phase prompt tells the conversation to spawn it for the slice, and a spawned agent's tool calls still go through the test lock and the write scope.
 Acceptance criteria:

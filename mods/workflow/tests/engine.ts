@@ -1,4 +1,4 @@
-import type { On } from 'claude-code'
+import type { AgentSpec, On } from 'claude-code'
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 
@@ -23,6 +23,19 @@ const PHASE_WRITES: Record<string, string> = {
   retro: '["{specsDir}/{slug}/**", "CLAUDE.md", ".claude/**", "docs/**"]',
 }
 
+export const BUILD_PHASE = `# The build phase
+
+Build the current slice.
+
+## With the user
+
+Talk the user through the slice.
+
+## Agent
+
+Do the build work.
+`
+
 export type Fake = {
   files: Map<string, string>
   committed: Map<string, string>
@@ -35,6 +48,7 @@ export type Fake = {
   statuses: Array<string | undefined>
   toasts: string[]
   tools: string[]
+  agents: AgentSpec[]
   answers: string[]
   questions: string[]
   bash: Map<string, number>
@@ -106,6 +120,7 @@ function shippedFile(path: string): string | undefined {
   const match = /\/(phases|guides|templates)\/([\w-]+)\.(md|json)$/.exec(path)
   if (match === null) return undefined
   const [, folder, name] = match
+  if (folder === 'phases' && name === 'build') return `---\nwrites: ["**"]\n---\n${BUILD_PHASE}`
   if (folder === 'phases') return `---\nwrites: ${PHASE_WRITES[name ?? ''] ?? '[]'}\n---\n# The ${name} phase\n\nDo the ${name} work.\n`
   return `# ${name}\n`
 }
@@ -123,6 +138,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     statuses: [],
     toasts: [],
     tools: [],
+    agents: [],
     answers: [],
     questions: [],
     bash: new Map(),
@@ -178,6 +194,10 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('tool.register', (_, e) => {
     fake.tools.push(`mcp__workflow__${e.name}`)
     return { value: { tool: `mcp__workflow__${e.name}` } }
+  })
+  on('agent.register', (_, e) => {
+    fake.agents.push(e)
+    return { value: { agent: `workflow:${e.name}` } }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('command.run', (_, e) => {

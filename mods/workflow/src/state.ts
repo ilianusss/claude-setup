@@ -1,5 +1,7 @@
 import { parseFrontmatter, renderFrontmatter } from './frontmatter'
 import type { Frontmatter } from './frontmatter'
+import { parsePlan, renderPlan } from './plan'
+import type { ModelPlan } from './plan'
 
 export const PHASES = ['setup', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'] as const
 export type Phase = (typeof PHASES)[number]
@@ -26,6 +28,7 @@ export type Workflow = {
   slice: number
   commits: boolean
   autoNext: boolean
+  models: ModelPlan
   paths: string[]
   session: string
   updated: string
@@ -103,6 +106,7 @@ export function parseWorkflow(markdown: string): Workflow {
     slice,
     commits: flag(data, 'commits'),
     autoNext: flag(data, 'auto_next'),
+    models: parsePlan(list(data, 'models')),
     paths: list(data, 'paths'),
     session: text(data, 'session'),
     updated: text(data, 'updated'),
@@ -135,6 +139,7 @@ export function renderWorkflow(workflow: Workflow): string {
     slice: String(workflow.slice),
     commits: workflow.commits ? 'yes' : 'no',
     auto_next: workflow.autoNext ? 'yes' : 'no',
+    models: renderPlan(workflow.models),
     paths: workflow.paths,
     session: workflow.session,
     updated: workflow.updated,

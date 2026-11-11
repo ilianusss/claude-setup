@@ -1,5 +1,6 @@
 import type { Register } from 'claude-code'
 
+import { registerAgents } from '../src/agents'
 import { clearThenSubmit } from '../src/clock'
 import { registerCommand, registerCommands } from '../src/commands'
 import { loadContext } from '../src/context'
@@ -24,6 +25,7 @@ export const register: Register = on => {
     await registerToolsOnce($, runtime)
     await announce($, context, await $.clock.now())
     await refreshStatus($, context)
+    await registerAgents($, context)
     return started
   })
 

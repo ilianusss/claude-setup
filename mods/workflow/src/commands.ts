@@ -1,5 +1,6 @@
 import type { EngineInterface, On, PromptOrigin } from 'claude-code'
 
+import { registerAgents } from './agents'
 import { ask, askOrUndefined } from './ask'
 import { unlockFile } from './build'
 import { clearThenSubmit, day, iso, submitLater } from './clock'
@@ -7,6 +8,7 @@ import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
 import { ADOPT, BRANCH, COMMITS, RETRO, SIZE, SWITCH } from './labels'
+import { DEFAULT_PLAN } from './plan'
 import { pausePrompt, phasePrompt, setupPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
@@ -108,6 +110,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     slice: 0,
     commits,
     autoNext: false,
+    models: DEFAULT_PLAN,
     paths: [],
     session: await $.session.id(),
     updated: iso(now),
@@ -172,6 +175,7 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
   const resumed: Workflow = { ...target, status: 'active', session: sessionId, slice, updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, resumed)
   await refreshStatus($)
+  await registerAgents($)
   const prompt = await phasePrompt($, context, resumed, drift)
   if (clearFirst) clearThenSubmit($, prompt)
   else submitLater($, prompt)
@@ -263,6 +267,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       slice,
       commits: false,
       autoNext: false,
+      models: DEFAULT_PLAN,
       paths: [],
       session: await $.session.id(),
       updated: iso(now),

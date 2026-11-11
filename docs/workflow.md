@@ -38,7 +38,7 @@ The status line shows the workflow on the current branch: `workflow login: build
 | spec | `docs/specs/<slug>/spec.md`: problem, users, scope, acceptance criteria in EARS, abuse cases | The spec, with no open question left |
 | design | `design.md`: drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
 | slice | `slices.md`: a walking skeleton first, then one behaviour per slice | The slices and their criteria |
-| build | Code and tests, one slice per session | Nothing: each slice closes when the mod has seen it green |
+| build | Code and tests, one slice per session, in the `workflow:build` agent | Nothing: each slice closes when the mod has seen it green |
 | inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
@@ -46,12 +46,14 @@ A phase can only write its own files: during the spec, a write to source code is
 
 ## A slice, step by step
 
+The conversation spawns the `workflow:build` agent for the slice and relays its report; the agent does steps 1 to 6. The mod registers that agent whenever the workflow on the current branch is in its build phase (at session start, after a phase is approved, after `/workflow continue` and after a verified slice), with the slice, its design sections and the checks in its prompt. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff` or `AskUserQuestion`: it reports what needs you, and the conversation asks. The test lock and the write scope hold for its tool calls as they do for the conversation's.
+
 1. Contract: types, schemas, stubs that throw.
 2. Tests for every acceptance criterion.
 3. Red: Claude asks the mod to lock; the mod answers with the exact command to run, and locks only after it saw that command fail on the current code.
 4. Green: the tests are frozen. Claude implements, then runs the slice tests, lint, typecheck and the full suite exactly as the mod listed them.
 5. The real thing: the app, the route, the screen.
-6. Verify: the mod closes the slice only if it saw every check pass on the current code. Claude ticks the slice, commits if you said so, and writes the handoff.
+6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice and commits if you said so; the conversation writes the handoff.
 7. Claude stops. You type `/workflow next` for the next slice, in a fresh context.
 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
@@ -74,11 +76,23 @@ A fresh clone has no state, but the committed documents survive: `/workflow adop
 
 | What | Where |
 | --- | --- |
-| The state of a workflow | `.git/claude-workflow/<slug>.md`, readable, never committed |
+| The state of a workflow, its model plan included | `.git/claude-workflow/<slug>.md`, readable, never committed |
 | The test lock | `.git/claude-workflow/locks/<slug>.json` |
 | The documents | `docs/specs/<slug>/` and `docs/adr/`, committed |
 | The project config | `.claude/workflow.json`, committed |
 
 ## Model and effort
 
-Spec, design, slice and inspect are short and reasoning-heavy: Opus at high effort, xhigh only for a hard design call. The build is well specified by then: Sonnet, or Opus at medium effort. Switch with `/model` before `/workflow next`.
+Each workflow has a model plan, the `models` line of its state file: one model and effort per step. A state file without it gets the default plan:
+
+| Step | Model | Effort |
+| --- | --- | --- |
+| map | sonnet | medium |
+| setup | sonnet | medium |
+| spec | opus | high |
+| design | opus | high |
+| slice | opus | high |
+| build | opus | medium |
+| review | opus | high |
+
+The models are `haiku`, `sonnet` and `opus`, the efforts `low`, `medium`, `high` and `xhigh`. An entry naming anything else (Fable, `max`, a typo) reads as that step's default. Today only the build runs in an agent, `workflow:build`, on the plan's build model and effort; the other phases run in the conversation, on its model: Opus at high effort for spec, design, slice and inspect, xhigh only for a hard design call.

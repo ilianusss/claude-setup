@@ -1,5 +1,6 @@
 import type { EngineInterface, On, RegisteredToolSpec } from 'claude-code'
 
+import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
 import { lockSlice, unlockFile, verifySlice } from './build'
 import { day, iso } from './clock'
@@ -135,6 +136,7 @@ async function advance($: EngineInterface, context: Context, summary: string, no
   const moved: Workflow = { ...workflow, phase: target, slice, status: target === 'done' ? 'done' : workflow.status, updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, withLog(moved, day(now), `${workflow.phase} approved`))
   await refreshStatus($)
+  await registerAgents($)
   if (target === 'done') return `Approved: "${workflow.slug}" is done.`
   return `Approved: "${workflow.slug}" is now in its ${target} phase. Call mcp__workflow__handoff with the next action, then tell the user that /workflow next starts ${target} in a fresh context.`
 }
@@ -185,6 +187,7 @@ async function verifyTool($: EngineInterface, runtime: Runtime): Promise<ToolAns
     const context = await contextOf($)
     const verified = await verifySlice($, context, await $.clock.now())
     if (verified.chainNext) runtime.pendingNext = context.current?.slug
+    await registerAgents($)
     return await answered($, verified.text)
   } catch (error) {
     return failure(error)

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import { DEFAULT_PLAN } from '../src/plan'
 import { firstPhase, parseWorkflow, phaseAfter, renderWorkflow, slugify, withLog } from '../src/state'
 import type { Workflow } from '../src/state'
+import { stateText } from './engine'
 
 const WORKFLOW: Workflow = {
   slug: 'login',
@@ -14,6 +16,7 @@ const WORKFLOW: Workflow = {
   slice: 3,
   commits: true,
   autoNext: false,
+  models: { ...DEFAULT_PLAN, build: { model: 'haiku', effort: 'low' }, review: { model: 'sonnet', effort: 'xhigh' } },
   paths: ['src/auth', 'src/api'],
   session: 's1',
   updated: '2026-10-22T10:00:00.000Z',
@@ -34,6 +37,28 @@ describe('the state file', () => {
     const text = renderWorkflow(WORKFLOW)
     expect(text.startsWith('---\nslug: login\n')).toBe(true)
     expect(text).toContain('## Next action\n\nImplement the refresh endpoint.')
+  })
+
+  test('writes the model plan as one models line', () => {
+    expect(renderWorkflow(WORKFLOW)).toContain(
+      '\nmodels: [map sonnet medium, setup sonnet medium, spec opus high, design opus high, slice opus high, build haiku low, review sonnet xhigh]\n',
+    )
+  })
+
+  test('a file without a models line reads as the default plan', () => {
+    expect(parseWorkflow(stateText()).models).toEqual(DEFAULT_PLAN)
+  })
+
+  test('a models line sets the plan of the steps it names', () => {
+    const workflow = parseWorkflow(stateText({ models: '[build haiku low]' }))
+
+    expect(workflow.models).toEqual({ ...DEFAULT_PLAN, build: { model: 'haiku', effort: 'low' } })
+  })
+
+  test('a models entry naming Fable or max effort reads as that step\'s default', () => {
+    const workflow = parseWorkflow(stateText({ models: '[build fable low, review opus max]' }))
+
+    expect(workflow.models).toEqual(DEFAULT_PLAN)
   })
 
   test('refuses a file with an unknown phase', () => {

@@ -70,6 +70,27 @@ async function currentSlice($: EngineInterface, context: Context, workflow: Work
   ].join('\n')
 }
 
+function header(workflow: Workflow): string[] {
+  const slice = workflow.phase === 'build' ? `, slice ${workflow.slice}` : ''
+  return [
+    `# Workflow: ${workflow.title}`,
+    `You are working on the workflow \`${workflow.slug}\` (${workflow.size}), phase ${workflow.phase}${slice}, on branch \`${workflow.branch}\`. The workflow mod keeps its state: change it only through the mcp__workflow__* tools. Commits after each slice: ${workflow.commits ? 'yes' : 'no, the user commits'}.`,
+  ]
+}
+
+function buildAgent(workflow: Workflow): string {
+  const { model, effort } = workflow.models.build
+  return [
+    '## The build agent',
+    '',
+    `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks below. Wait for it, then relay its report to the user: what it built, each check and its result, the answer of mcp__workflow__verify, and its open questions.`,
+  ].join('\n')
+}
+
+function joined(parts: ReadonlyArray<string | undefined>): string {
+  return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
+}
+
 export async function phasePrompt(
   $: EngineInterface,
   context: Context,
@@ -78,18 +99,29 @@ export async function phasePrompt(
 ): Promise<string> {
   const doc = await readPhase($, workflow.phase)
   const specs = specsFolder(context, workflow)
-  const slice = workflow.phase === 'build' ? `, slice ${workflow.slice}` : ''
   const parts = [
-    `# Workflow: ${workflow.title}`,
-    `You are working on the workflow \`${workflow.slug}\` (${workflow.size}), phase ${workflow.phase}${slice}, on branch \`${workflow.branch}\`. The workflow mod keeps its state: change it only through the mcp__workflow__* tools. Commits after each slice: ${workflow.commits ? 'yes' : 'no, the user commits'}.`,
+    ...header(workflow),
     drift,
     doc.body,
+    workflow.phase === 'build' ? buildAgent(workflow) : undefined,
     standing(workflow),
     files($, specs),
     workflow.phase === 'build' ? await currentSlice($, context, workflow) : undefined,
     workflow.phase === 'build' ? checks(context.config) : undefined,
   ]
-  return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
+  return joined(parts)
+}
+
+export async function agentInstructions($: EngineInterface, context: Context, workflow: Workflow): Promise<string | undefined> {
+  const doc = await readPhase($, workflow.phase)
+  if (doc.agent === undefined) return undefined
+  return joined([
+    ...header(workflow),
+    doc.agent,
+    files($, specsFolder(context, workflow)),
+    workflow.phase === 'build' ? await currentSlice($, context, workflow) : undefined,
+    workflow.phase === 'build' ? checks(context.config) : undefined,
+  ])
 }
 
 export async function setupPrompt($: EngineInterface): Promise<string> {

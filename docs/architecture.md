@@ -65,6 +65,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 - **A tool a mod answers itself skips the permission step.** Approvals go through `$.ui.ask`.
 - **A mod cannot run a command from inside its own command hook**: it answers first, then runs it from a timer.
 - **Rewritten replies are stored and shown rewritten**, with no flash while streaming.
+- **A mod's guards see a subagent's tool calls.** Measured on 2026-11-11 with a headless run in a scratch repo: an agent the workflow mod registered (`workflow:build`) ran the red command, locked the slice through `mcp__workflow__lock`, and its Edit to the locked test and Write to the state folder were refused, exactly as in the conversation. The agent ran on the model of its spec (haiku under a sonnet session), and the tools in its `disallowedTools` were absent from its tool list.
 
 ## The mods
 
@@ -85,7 +86,9 @@ All four are TypeScript modules for the Claude Code mod API (early access: it ma
 - five tools for Claude (`handoff`, `advance`, `lock`, `verify`, `unlock`), registered only in repos with a workflow;
 - the test lock: a slice's tests are locked once the mod saw the exact test command fail on the current code, and the slice closes once it saw every check pass on the current code. The mod never runs project code: it watches the commands Claude runs through Bash;
 - guards: locked tests refused to Edit and restored after a shell change, each phase limited to the files it may write;
-- prompts composed per step: the phase file, the state, and for a build the slice with the design sections it names.
+- prompts composed per step: the phase file, the state, and for a build the slice with the design sections it names;
+- the model plan: one model and effort per step in the state file, the default plan when it is missing, and the step's default for any entry naming Fable, `max` or an unknown value;
+- the `workflow:build` agent, registered with `$.agent.register` while the workflow on the current branch is in its build phase, on the plan's build model and effort, with the `## Agent` section of `phases/build.md`, the slice and the checks as its prompt, and `advance`, `handoff` and `AskUserQuestion` withheld. The conversation keeps the `## With the user` section: it spawns the agent and relays its report.
 
 **scribe** fixes each prompt before Claude reads it:
 
