@@ -14,6 +14,7 @@ const SEQUENCES: Readonly<Record<Size, readonly Phase[]>> = {
   feature: ['intake', 'design', 'slice', 'build', 'inspect', 'done'],
   project: ['intake', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
 }
+export const MAX_REVIEW_ROUNDS = 3
 const LOG_LENGTH = 10
 const SLUG_WORDS = 5
 
@@ -27,6 +28,7 @@ export type Workflow = {
   worktree: string
   slice: number
   step?: number
+  reviewRound?: number
   commits: boolean
   autoNext: boolean
   models: ModelPlan
@@ -58,9 +60,10 @@ function flag(data: Frontmatter, key: string): boolean {
   return oneOf(data, key, ['yes', 'no']) === 'yes'
 }
 
-function stepOf(data: Frontmatter): number | undefined {
-  const step = Number(data.step)
-  return typeof data.step === 'string' && Number.isInteger(step) && step > 0 ? step : undefined
+function positive(data: Frontmatter, key: string): number | undefined {
+  const value = data[key]
+  const count = Number(value)
+  return typeof value === 'string' && Number.isInteger(count) && count > 0 ? count : undefined
 }
 
 function list(data: Frontmatter, key: string): string[] {
@@ -101,7 +104,8 @@ export function parseWorkflow(markdown: string): Workflow {
   const slice = Number(text(data, 'slice'))
   if (!Number.isInteger(slice) || slice < 0) throw new Error(`slice is "${text(data, 'slice')}", expected a whole number`)
   const sections = bodySections(body)
-  const step = stepOf(data)
+  const step = positive(data, 'step')
+  const reviewRound = positive(data, 'review_round')
   return {
     slug: text(data, 'slug'),
     title: text(data, 'title'),
@@ -112,6 +116,7 @@ export function parseWorkflow(markdown: string): Workflow {
     worktree: text(data, 'worktree'),
     slice,
     ...(step === undefined ? {} : { step }),
+    ...(reviewRound === undefined ? {} : { reviewRound }),
     commits: flag(data, 'commits'),
     autoNext: flag(data, 'auto_next'),
     models: parsePlan(list(data, 'models')),
@@ -146,6 +151,7 @@ export function renderWorkflow(workflow: Workflow): string {
     worktree: workflow.worktree,
     slice: String(workflow.slice),
     ...(workflow.step === undefined ? {} : { step: String(workflow.step) }),
+    ...(reviewRoundOf(workflow) === 0 ? {} : { review_round: String(workflow.reviewRound) }),
     commits: workflow.commits ? 'yes' : 'no',
     auto_next: workflow.autoNext ? 'yes' : 'no',
     models: renderPlan(workflow.models),
@@ -177,9 +183,9 @@ export function pipeline(size: Size, withSetup: boolean): Phase[] {
   return withSetup ? ['intake', 'setup', ...phases.slice(1)] : phases
 }
 
-// The saved sub-step belongs to the phase it was set in.
+// The saved sub-step and the review rounds belong to the phase they were counted in.
 export function inPhase(workflow: Workflow, phase: Phase): Workflow {
-  return { ...workflow, phase, step: undefined }
+  return { ...workflow, phase, step: undefined, reviewRound: undefined }
 }
 
 // The first phase of the work itself: every workflow starts with the intake, which leads here.
@@ -198,6 +204,10 @@ export function slugify(title: string): string {
     .filter(word => word.length > 0)
     .slice(0, SLUG_WORDS)
     .join('-')
+}
+
+export function reviewRoundOf(workflow: Workflow): number {
+  return workflow.reviewRound ?? 0
 }
 
 export function withLog(workflow: Workflow, date: string, entry: string): Workflow {

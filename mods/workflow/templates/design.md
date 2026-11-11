@@ -2,6 +2,10 @@
 
 Keep these section names: slices name the sections they need, and the workflow mod hands exactly those to the build.
 
+## Context
+
+<What exists, written by the map agent for a feature: the structure, the conventions, the code the change touches and what it may affect, with file paths. Leave it out when no map was made.>
+
 ## Drivers
 
 - <Quality attributes and constraints that decide this design, most important first.>

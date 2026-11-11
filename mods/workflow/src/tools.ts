@@ -13,6 +13,7 @@ import { DEFAULT_PLAN, EFFORTS, MODELS as MODEL_NAMES, STEPS, parseRecommendatio
 import type { ModelPlan, Recommendation } from './plan'
 import { phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
+import { endReviewRound } from './review'
 import type { Runtime } from './runtime'
 import { inPhase, phaseAfter, withLog } from './state'
 import type { Workflow } from './state'
@@ -365,8 +366,12 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
   )
   on('turn.complete', async ($, e, next) => {
     const ended = await next(e)
-    if (e.agentId !== undefined) await handOver($, runtime, e.agentId)
-    else await turnEnded($)
+    if (e.agentId !== undefined) {
+      await handOver($, runtime, e.agentId)
+      await endReviewRound($, { reason: e.reason, agentId: e.agentId })
+    } else {
+      await turnEnded($)
+    }
     return ended
   })
 }

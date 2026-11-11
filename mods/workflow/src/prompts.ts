@@ -8,6 +8,7 @@ import { STEP_SOURCES, readPhase, stepOf, stepsOf } from './phases'
 import { DEFAULT_PLAN, describeChoice } from './plan'
 import type { Step } from './plan'
 import { sections } from './slices'
+import { MAX_REVIEW_ROUNDS, reviewRoundOf } from './state'
 import type { Workflow } from './state'
 
 function bulletOr(items: readonly string[], none: string): string {
@@ -118,6 +119,40 @@ function stepAgent(workflow: Workflow, step: Step): string {
   ].join('\n')
 }
 
+function mapAgent(workflow: Workflow): string | undefined {
+  if (workflow.phase !== 'design' || workflow.size !== 'feature') return undefined
+  return [
+    '## The map agent',
+    '',
+    `This workflow is a feature, with no spec to start from: open the phase by asking the user with AskUserQuestion whether to map the project first, with the options "Yes, map the project first (Recommended)" and "No, start the design". On yes, spawn \`workflow:map\` with the Agent tool, in the foreground, on ${describeChoice(workflow.models.map)}: it writes a \`## Context\` section at the top of this workflow's \`design.md\` (the structure, the conventions, the code the change touches and what it may affect). Relay what it found, then go on with the research; \`workflow:design\` starts from that section.`,
+  ].join('\n')
+}
+
+function reviewRounds(workflow: Workflow): string | undefined {
+  if (workflow.phase !== 'inspect') return undefined
+  return [
+    '## Review rounds',
+    '',
+    `- ${reviewRoundOf(workflow)} of ${MAX_REVIEW_ROUNDS} review rounds have ended in this workflow. The mod counts one each time a \`workflow:review\` run ends; the loop stops at ${MAX_REVIEW_ROUNDS}.`,
+    `- Fixes run in \`workflow:build\`, on ${describeChoice(workflow.models.build)}: spawn it in the foreground with the findings to fix and wait for its report. In this phase it fixes them test-first without the slice lock, then runs every check.`,
+  ].join('\n')
+}
+
+function fixing(config: Config | undefined): string {
+  const commands = config === undefined ? [] : [config.commands.lint, config.commands.typecheck, config.commands.test]
+  const checks = commands.filter((command): command is string => command !== undefined).map(command => `\`${command}\``)
+  return [
+    '## Fixing review findings',
+    '',
+    'The workflow is in its inspect phase: your prompt names review findings to fix, not a slice. Leave out the lock and verify steps above: mcp__workflow__lock and mcp__workflow__verify belong to the build phase and are refused here, so the discipline is yours.',
+    '',
+    '1. For each finding, write the failing test that shows it first (a bug found in review gets its failing test before its fix), run it and read the failure: it must fail for the reason the finding names.',
+    '2. Fix it with the smallest change, and run the test again.',
+    `3. Run every check, exactly as written, with nothing appended, until each passes: ${checks.length > 0 ? checks.join(', ') : "the project's lint, typecheck and full test suite"}.`,
+    '4. Report each finding with the test that covers it, and each check with its result. An existing test changes only with a reason the user agrees with: stop and put it in your open questions.',
+  ].join('\n')
+}
+
 function agentPart(workflow: Workflow, step: Step | undefined): string | undefined {
   if (step === undefined) return undefined
   return step === 'build' ? buildAgent(workflow) : stepAgent(workflow, step)
@@ -164,7 +199,9 @@ export async function phasePrompt(
     drift,
     doc.body,
     workflow.phase === 'intake' ? defaultModels(context, workflow) : undefined,
+    mapAgent(workflow),
     agentPart(workflow, step),
+    reviewRounds(workflow),
     standing(workflow),
     files($, specsFolder(context, workflow)),
     isBuilding ? await sliceNamed($, context, workflow) : undefined,
@@ -181,9 +218,11 @@ export async function agentInstructions(
   const section = (await readPhase($, source.phase)).agents[source.section]
   if (section === undefined) return undefined
   const isBuilding = step === 'build' && workflow.phase === 'build'
+  const isFixing = step === 'build' && workflow.phase === 'inspect'
   return joined([
     ...header(workflow),
     section,
+    isFixing ? fixing(context.config) : undefined,
     files($, specsFolder(context, workflow)),
     isBuilding ? await currentSlice($, context, workflow) : undefined,
     isBuilding ? checks(context.config) : undefined,

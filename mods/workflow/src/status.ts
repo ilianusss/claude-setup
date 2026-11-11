@@ -9,6 +9,7 @@ import { PRODUCES } from './labels'
 import { readPhase, stepOf } from './phases'
 import { describeChoice } from './plan'
 import { readLock } from './store'
+import { MAX_REVIEW_ROUNDS, reviewRoundOf } from './state'
 import type { Workflow } from './state'
 
 const banner = atom({ plugin: 'workflow', key: 'banner' } as const, null, { shape: 'banner-1' })
@@ -82,11 +83,16 @@ async function buildStep($: EngineInterface, context: Context, workflow: Workflo
 
 async function subStep($: EngineInterface, context: Context, workflow: Workflow): Promise<WorkflowBanner['step']> {
   if (workflow.phase === 'build') return { name: await buildStep($, context, workflow) }
-  if (workflow.phase === 'inspect') return { name: 'review' }
+  if (workflow.phase === 'inspect') return { name: reviewStep(workflow) }
   if (workflow.step === undefined || workflow.phase === 'done') return null
   const steps = (await readPhase($, workflow.phase)).steps
   const name = steps[workflow.step - 1]
   return name === undefined ? null : { name, number: workflow.step, count: steps.length }
+}
+
+function reviewStep(workflow: Workflow): string {
+  const round = reviewRoundOf(workflow)
+  return round === 0 ? 'review' : `review round ${round}/${MAX_REVIEW_ROUNDS}`
 }
 
 function runnerOf(workflow: Workflow): string {

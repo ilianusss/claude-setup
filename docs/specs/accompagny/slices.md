@@ -126,7 +126,7 @@ Design: Components, Data model, API contracts, Observability
 Depends on: Slice 5
 
 ## Slice 8: The review loop and the project map
-- [ ] Done
+- [x] Done
 
 Goal: the inspect phase fixes what matters on its own, and a feature can start from a map of the project.
 Acceptance criteria:

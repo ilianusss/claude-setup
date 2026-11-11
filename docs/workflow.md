@@ -40,7 +40,7 @@ build 2/5: tests locked · opus medium · waiting for you
 
 - The first line lists the steps of this workflow in order: intake, setup while the project has no `.claude/workflow.json` (it leaves the line once written), spec and retro for a project. The current step is bold and coloured, the others dim, with no done markers. Build carries the slice count.
 - The second line is the current sub-step, the model and effort of whoever does it (the step's agent from the plan, or "conversation" for the intake and the retro), and "working" or "waiting for you". In a narrow terminal the band drops the steps before the current one, then shortens the sub-step, then the model: "waiting for you" always shows.
-- The sub-steps are the numbered bold steps of the phase file's "With the user" section (`1. **Read**` gives "read"). Claude calls `mcp__workflow__progress { step }` as it starts each one; the mod saves it as `step` in the state, so a resumed workflow shows it, and clears it when the phase changes. It is refused out of range, from a step agent, and in build and inspect, whose sub-step the mod names itself: "writing tests", "tests locked", then "slice N verified" until the build agent's run ends; "review" in inspect.
+- The sub-steps are the numbered bold steps of the phase file's "With the user" section (`1. **Read**` gives "read"). Claude calls `mcp__workflow__progress { step }` as it starts each one; the mod saves it as `step` in the state, so a resumed workflow shows it, and clears it when the phase changes. It is refused out of range, from a step agent, and in build and inspect, whose sub-step the mod names itself: "writing tests", "tests locked", then "slice N verified" until the build agent's run ends; "review" in inspect, then "review round N/3" once a review round has ended.
 - "Working" runs from a submitted prompt to the end of the conversation's turn; "waiting for you" after it, and while one of the mod's dialogs or the Models panel is open. A step agent's turns do not change it.
 
 The status line carries the same data: `workflow login: build 2/5, opus medium, waiting for you`. A dim transcript line marks the start of each phase with what it produces.
@@ -54,10 +54,10 @@ Every phase prompt also carries the "Leading the user" rules: Claude opens a pha
 | intake | No file: it asks the problem, the result you want, how success will show, the limits and what is out of scope, restates it, and saves the goal you confirm in the state | The restated goal |
 | setup | `.claude/workflow.json`, the project CLAUDE.md and settings, after running each command once | The three files |
 | spec | `docs/specs/<slug>/spec.md`: problem, users, scope, acceptance criteria in EARS, abuse cases | The spec, with no open question left |
-| design | `design.md`: drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
+| design | `design.md`: for a feature, a Context section first when you accept the project map; drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
 | slice | `slices.md`: a walking skeleton first, then one behaviour per slice | The slices and their criteria |
 | build | Code and tests, one `workflow:build` agent run per slice | Nothing: each slice closes when the mod has seen it green |
-| inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
+| inspect | Review rounds until no blocker or major is left, the minor fixes you pick, a pull request draft | What to do when 3 rounds were not enough, the minors to fix, the push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
 A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. "Continue" moves the phase and Claude goes straight on with the next one in the same conversation; "Stop here" moves it, pauses the workflow (`/workflow` lists it as paused) and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance`, `mcp__workflow__handoff` and `mcp__workflow__unlock`: the mod refuses them from a step agent.
@@ -73,7 +73,7 @@ Your conversation talks to you; agents do the work. Each phase file has a "With 
 | `workflow:spec` | Writes `spec.md` from your answers (projects only) | spec |
 | `workflow:design` | Researches, proposes the options, writes `design.md` and the ADRs | design |
 | `workflow:slice` | Writes `slices.md` | slice |
-| `workflow:build` | Builds one slice | build |
+| `workflow:build` | Builds one slice; in inspect, fixes review findings | build, inspect |
 | `workflow:review` | Reviews the branch, read-only (`Read`, `Grep`, `Glob`, `Bash`), with the prompt of `agents/reviewer.md` | inspect |
 
 An agent gets only its "Agent" section and the shared worker rules, which end with its report format: what it did, the files, the checks, and its open questions. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff`, `mcp__workflow__unlock` or `AskUserQuestion`: in the spec and design phases the conversation asks you the questions and the agents research, draft and return what they could not settle. The intake and the retro have no agent and run in the conversation.
@@ -93,6 +93,23 @@ The conversation spawns the `workflow:build` agent for the slice and relays its 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
 
 **`auto_next`**: with `auto_next: yes` in the state file, the mod tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here; stopping pauses the workflow. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
+
+## The project map
+
+A feature has no spec, so its design phase opens by offering to map the project first, Yes recommended. On yes, the conversation spawns `workflow:map`, which reads only and writes the `## Context` section at the top of `design.md`: the structure, the conventions, the code the change touches and what it may affect, with file paths. `workflow:design` starts its research from it. A project starts from its spec and is not offered the map.
+
+## The review loop
+
+The inspect phase reviews the branch in rounds:
+
+1. The conversation spawns `workflow:review` on the whole branch; the first round also runs the `code-review` skill, and `/security-review` when the change calls for it. It merges the findings by severity.
+2. While a blocker or a major is left and fewer than 3 rounds have ended, it spawns `workflow:build` to fix them, then reviews again.
+3. After 3 rounds with a blocker or a major left, it stops and asks you how to go on: fix them by hand, accept them as known issues, or go back to the design.
+4. Once none is left, it asks you in one multi-select dialog which minor findings to fix; the others go in the pull request body as known issues.
+
+The mod counts the rounds: each time a `workflow:review` run ends with its report in inspect (an interrupted run does not count), it saves `review_round` in the state, logs "review round N" and writes a dim transcript line, and the band shows "inspect: review round N/3". The inspect prompt tells the conversation how many rounds have ended, so the count survives a pause. The count resets when the workflow leaves inspect.
+
+**Fixes in inspect run without the test lock.** `mcp__workflow__lock` and `mcp__workflow__verify` belong to the build phase and stay refused in inspect. In this phase the `workflow:build` agent's prompt replaces the slice with "Fixing review findings": for each finding, a failing test first (a bug found in review gets its failing test before its fix), seen to fail for the reason the finding names, then the smallest fix; then lint, typecheck and the full suite exactly as written, each result in its report. The next review round checks the fixes, tests included.
 
 ## Several workflows at once
 
