@@ -32,6 +32,23 @@ export const SWITCH = {
   no: 'Cancel',
 }
 
+export const MODELS = {
+  question: 'Which models should the steps use?',
+  defaults: 'Use the defaults',
+  recommended: "Use Claude's recommendations",
+  perStep: 'Choose per step',
+}
+
+export const PICKER = {
+  title: 'Models',
+  use: 'Use these',
+  reset: 'Reset to recommended',
+  cancel: 'Cancel',
+  recommended: 'recommended',
+  dialogRecommended: '(Recommended)',
+  dialogDefault: '(default)',
+}
+
 export const GATE = { approve: 'Continue', stop: 'Stop here', wait: 'Not yet' }
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }

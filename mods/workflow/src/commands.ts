@@ -8,7 +8,8 @@ import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
 import { ADOPT, BRANCH, CHAINING, COMMITS, RETRO, SIZE, SWITCH } from './labels'
-import { DEFAULT_PLAN } from './plan'
+import { chooseModels, recommendationsFor } from './picker'
+import { DEFAULT_PLAN, renderPlan } from './plan'
 import { enterWorktreePrompt, pausePrompt, phasePrompt, setupPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
@@ -30,6 +31,7 @@ const USAGE = [
   '- /workflow continue [slug]: resume one',
   '- /workflow next: clear the context and continue',
   '- /workflow pause: write the handoff and stop',
+  '- /workflow models: choose the model and effort of each step',
   '- /workflow unlock <file> <reason>: unlock a locked test yourself',
   '- /workflow done <slug>, /workflow abandon <slug> <reason>: close one',
   '- /workflow adopt: set up this project, or rebuild workflows from their specs',
@@ -191,6 +193,16 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
   return `${action} "${target.slug}": ${await phaseLabel($, context, resumed)}.${elsewhere}`
 }
 
+async function models($: EngineInterface, { context }: Session): Promise<string> {
+  const workflow = context.current
+  if (workflow === undefined) return 'no workflow runs on this branch. /workflow continue <slug> picks one.'
+  const chosen = await chooseModels($, context, workflow, await recommendationsFor($, workflow.slug), 'stay')
+  if (chosen === 'pane') return `choose the model and effort of each step of "${workflow.slug}" in the Models panel.`
+  await registerAgents($)
+  const plan = renderPlan(chosen.models).join(', ')
+  return plan === renderPlan(workflow.models).join(', ') ? `the models of "${workflow.slug}" are unchanged.` : `the models of "${workflow.slug}" are now: ${plan}.`
+}
+
 async function pause($: EngineInterface, { context, now }: Session, slug: string | undefined): Promise<string> {
   const target = pick(context, slug)
   await saveWorkflow($, context.repo, context.paths, withLog({ ...target, status: 'paused', updated: iso(now) }, day(now), 'paused'))
@@ -313,6 +325,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
       return resume($, session, rest[0], true)
     case 'pause':
       return pause($, session, rest[0])
+    case 'models':
+      return models($, session)
     case 'unlock':
       return unlock($, session, rest, origin)
     case 'done':
@@ -329,8 +343,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
 export async function registerCommand($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'workflow',
-    description: "This repo's workflows; new, continue, next, pause, unlock, done, abandon, adopt, all.",
-    argumentHint: '[new <title> | continue [slug] | next | pause | unlock <file> <reason> | done | abandon | adopt | all]',
+    description: "This repo's workflows; new, continue, next, pause, models, unlock, done, abandon, adopt, all.",
+    argumentHint: '[new <title> | continue [slug] | next | pause | models | unlock <file> <reason> | done | abandon | adopt | all]',
   })
 }
 

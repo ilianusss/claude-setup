@@ -25,17 +25,28 @@ In a repo, type `/workflow new <title>`. Every workflow starts with an intake, w
 | `/workflow continue [slug]` | Resume one where it stopped, with a drift check after a long break |
 | `/workflow next` | Clear the context and continue, when resuming by hand: gates and slices go on by themselves |
 | `/workflow pause` | Write the handoff and stop |
+| `/workflow models` | Choose each step's model and effort in the Models panel (one dialog per step where the panel cannot be shown) |
 | `/workflow unlock <file> <reason>` | Unlock a locked test yourself |
 | `/workflow done <slug>`, `/workflow abandon <slug> <reason>` | Close one |
 | `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs (a folder without documents starts at the intake) |
 
-Your conversation talks to you and an agent the mod registers does each step's work (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, the read-only `review`); the intake and the retro stay in the conversation. At each gate you answer Continue (Claude goes straight on), Stop here (Claude hands off, pauses the workflow and stops) or Not yet. When a `workflow:build` agent ends after a verified slice, the mod asks you whether to go on, unless slice chaining is on, and hands the conversation the next step. The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
+Your conversation talks to you and an agent the mod registers does each step's work (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, the read-only `review`); the intake and the retro stay in the conversation. After the intake you choose the model and effort the agents run on: the defaults below, Claude's recommendations for this workflow, or a choice per step in the Models panel; `/workflow models` changes them later. At each gate you answer Continue (Claude goes straight on), Stop here (Claude hands off, pauses the workflow and stops) or Not yet. When a `workflow:build` agent ends after a verified slice, the mod asks you whether to go on, unless slice chaining is on, and hands the conversation the next step. The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
+
+Default plan:
+
+| Step | Model | Effort |
+| --- | --- | --- |
+| map, setup | sonnet | medium |
+| spec, design, slice, review | opus | high |
+| build | opus | medium |
+
+Fable and `max` effort are never offered, and Claude's recommendation of `xhigh` needs a reason.
 
 ## Project structure
 
 ```text
 hooks/        the module Claude Code loads
-src/          commands, tools, guards, state, the test lock
+src/          commands, tools, guards, state, the test lock, the Models panel
 phases/       each phase: what the conversation does with you, what its agent does, the files it may write
 guides/       question banks, the decision guide, EARS, the drift check
 templates/    spec, design, slices, ADR, project CLAUDE.md, workflow.json

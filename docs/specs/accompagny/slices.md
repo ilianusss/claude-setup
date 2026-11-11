@@ -91,7 +91,7 @@ Design: Components, Data model, API contracts
 Depends on: Slice 1, Slice 2
 
 ## Slice 6: The model choice and the picker
-- [ ] Done
+- [x] Done
 
 Goal: after the intake, the user keeps the default models, takes Claude's recommendations, or picks per step in a panel.
 Acceptance criteria:

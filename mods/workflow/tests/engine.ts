@@ -1,4 +1,4 @@
-import type { AgentSpec, On } from 'claude-code'
+import type { AgentSpec, On, PaneOpenArgs } from 'claude-code'
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 
@@ -81,6 +81,9 @@ export type Fake = {
   missing: string[]
   trees: Map<string, Map<string, string>>
   clock: MockClock
+  isPlaced: boolean
+  opened: PaneOpenArgs[]
+  closed: string[]
 }
 
 function fnv(text: string): string {
@@ -178,6 +181,9 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     missing: [],
     trees: new Map(),
     clock: mock.clock(on, { now: NOW }),
+    isPlaced: true,
+    opened: [],
+    closed: [],
   }
   mock.store(on)
 
@@ -255,6 +261,14 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     return { value: undefined }
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('ui.open', (_, e) => {
+    fake.opened.push(e)
+    return { value: fake.isPlaced ? { isPlaced: true } : { isPlaced: false, reason: 'the terminal is 80 columns wide, under 144' } }
+  })
+  on('ui.close', (_, e) => {
+    fake.closed.push(e.id)
+    return { value: undefined }
+  })
   return fake
 }
 

@@ -4,6 +4,7 @@ import { registerAgents } from '../src/agents'
 import { registerCommand, registerCommands } from '../src/commands'
 import { loadContext } from '../src/context'
 import { registerGuards } from '../src/guards'
+import { registerPicker } from '../src/picker'
 import { newRuntime } from '../src/runtime'
 import { announce, refreshStatus } from '../src/status'
 import { registerToolHandlers, registerToolsOnce } from '../src/tools'
@@ -14,6 +15,7 @@ export const register: Register = on => {
   registerCommands(on, runtime)
   registerToolHandlers(on, runtime)
   registerGuards(on)
+  registerPicker(on)
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)

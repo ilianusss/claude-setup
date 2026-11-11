@@ -23,6 +23,7 @@ Every workflow starts with the intake, where Claude asks what you want. In a pro
 | `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named, with the prompt of the phase it stopped in (after a "Stop here", for one); offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
 | `/workflow next` | Clears the context, then continues: only needed to resume by hand in a fresh context, since gates and slices go on by themselves |
 | `/workflow pause` | Claude writes the handoff, then stops |
+| `/workflow models` | Opens the Models panel for the workflow on this branch, its current plan preselected, to change each step's model and effort at any time |
 | `/workflow unlock <file> <reason>` | You unlock a locked test yourself |
 | `/workflow done <slug>` | Closes it; a project is offered its retro first |
 | `/workflow abandon <slug> <reason>` | Closes it with the reason |
@@ -113,3 +114,13 @@ Each workflow has a model plan, the `models` line of its state file: one model a
 | review | opus | high |
 
 The models are `haiku`, `sonnet` and `opus`, the efforts `low`, `medium`, `high` and `xhigh`. An entry naming anything else (Fable, `max`, a typo) reads as that step's default. Each step's agent runs on its plan model and effort, named in the conversation's prompt; the intake and the retro run in the conversation, on its model.
+
+Only you set the plan. Before the intake's gate, Claude follows `choosing-model-and-effort` and passes its recommendations to `mcp__workflow__advance` as `recommendations`: `{ step, model, effort, reason }` for each step of this workflow where it would differ from the default. The mod refuses the whole list, naming the entry, and nothing moves, for a step this workflow does not run, Fable, `max`, an unknown value, `xhigh` without a reason, or any recommendation outside the intake's gate. After "Continue" it asks "Which models should the steps use?":
+
+- "Use the defaults" saves the default plan.
+- "Use Claude's recommendations" saves the defaults with the recommendations over them (offered only when Claude gave some).
+- "Choose per step" opens the Models panel, a focused dialog with one row per step of this workflow in pipeline order: a model and an effort picker on the current plan, the recommended values marked "(recommended)", "changed from <default>" on a row that differs from the default, and Claude's recommendation with its reason in a dim line beneath. Picking `xhigh` adds a one-line warning. Tab moves between the pickers and buttons, Enter picks, `u` or "Use these" saves, `r` or "Reset to recommended" puts the recommended values back, Esc or "Cancel" keeps the plan as it was. Fable and `max` are never offered. The conversation waits while the panel is open; the mod sends it the next phase's prompt once you confirm or cancel.
+- Where the panel cannot be shown (opened from a tool on a terminal under 144 columns, say), the same choice runs as one dialog per step: the recommended value marked "(Recommended)", the default when different, one cheaper and one stronger option, and "Other" for a typed `model effort` such as `sonnet high`, asked again until it names an allowed pair. Closing a dialog keeps the plan.
+- Closing the question keeps the plan.
+
+A confirmed plan that changes something is saved in the state, logged as `models changed: <step> <model> <effort>, ...`, and the step agents are registered again on it. `/workflow models` opens the same panel later, with the recommendations Claude gave earlier in the same session.
