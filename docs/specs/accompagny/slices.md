@@ -40,7 +40,7 @@ Design: Problem and acceptance criteria, Components, Data model, API contracts
 Depends on: Slice 1
 
 ## Slice 3: `/workflow new` runs by itself
-- [ ] Done
+- [x] Done
 
 Goal: one `/workflow new` and the user is in the intake, in the worktree, with nothing else to type.
 Acceptance criteria:

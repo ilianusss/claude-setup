@@ -21,13 +21,13 @@ In a repo, type `/workflow new <title>`. Every workflow starts with an intake, w
 | --- | --- |
 | `/workflow` | The workflows of this repo |
 | `/workflow all` | Open workflows in every repo |
-| `/workflow new <title>` | Start one: size, commits and branch are asked in a dialog |
+| `/workflow new <title>` | Start one: size, commits, slice chaining and branch are asked in a dialog, then Claude moves into the new worktree and starts the intake. Without a title, the prompt box gets `/workflow new ` |
 | `/workflow continue [slug]` | Resume one, with a drift check after a long break |
 | `/workflow next` | Clear the context and continue: the command between slices |
 | `/workflow pause` | Write the handoff and stop |
 | `/workflow unlock <file> <reason>` | Unlock a locked test yourself |
 | `/workflow done <slug>`, `/workflow abandon <slug> <reason>` | Close one |
-| `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs |
+| `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs (a folder without documents starts at the intake) |
 
 The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
 

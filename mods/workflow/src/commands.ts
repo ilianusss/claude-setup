@@ -7,14 +7,14 @@ import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
-import { ADOPT, BRANCH, COMMITS, RETRO, SIZE, SWITCH } from './labels'
+import { ADOPT, BRANCH, CHAINING, COMMITS, RETRO, SIZE, SWITCH } from './labels'
 import { DEFAULT_PLAN } from './plan'
-import { pausePrompt, phasePrompt, setupPrompt } from './prompts'
+import { enterWorktreePrompt, pausePrompt, phasePrompt, setupPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
 import type { Runtime } from './runtime'
 import { parseSlices } from './slices'
-import { firstPhase, slugify, withLog } from './state'
+import { slugify, withLog } from './state'
 import type { Phase, Size, Workflow } from './state'
 import { phaseLabel, refreshStatus } from './status'
 import { openWorkflowsEverywhere, saveWorkflow } from './store'
@@ -78,19 +78,26 @@ async function placement($: EngineInterface, session: Session, slug: string): Pr
   return { branch: context.repo.branch, worktree: context.repo.root, here: true }
 }
 
+async function askForTitle($: EngineInterface): Promise<string> {
+  await $.prompt.fill({ text: '/workflow new ' })
+  return 'name the workflow: type its title after /workflow new, then press Enter.'
+}
+
 async function start($: EngineInterface, session: Session, title: string): Promise<string> {
   const { context, now, runtime } = session
   const slug = slugify(title)
-  if (slug.length === 0) return 'give the workflow a title: /workflow new <title>'
+  if (slug.length === 0) return askForTitle($)
   if (context.workflows.some(workflow => workflow.slug === slug)) {
     return `"${slug}" exists already. /workflow continue ${slug} resumes it.`
   }
   let size: Size
   let commits: boolean
+  let autoNext: boolean
   let where: Awaited<ReturnType<typeof placement>>
   try {
     size = (await ask($, SIZE.question(title), [SIZE.feature, SIZE.project], 'Size')) === SIZE.project ? 'project' : 'feature'
     commits = (await ask($, COMMITS.question, [COMMITS.yes, COMMITS.no], 'Commits')) === COMMITS.yes
+    autoNext = (await ask($, CHAINING.question, [CHAINING.yes, CHAINING.no], 'Next slice')) === CHAINING.yes
     where = await placement($, session, slug)
   } catch (error) {
     return error instanceof Error && error.message.startsWith('git ')
@@ -109,7 +116,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     worktree: where.worktree,
     slice: 0,
     commits,
-    autoNext: false,
+    autoNext,
     models: DEFAULT_PLAN,
     paths: [],
     session: await $.session.id(),
@@ -124,7 +131,8 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   await saveWorkflow($, context.repo, context.paths, workflow)
   await registerToolsOnce($, runtime)
   if (!where.here) {
-    return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Start a session there and run /workflow continue ${slug}.`
+    submitLater($, enterWorktreePrompt(workflow, await phasePrompt($, context, workflow)))
+    return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Claude is moving the session there to start the intake.`
   }
   const fresh = await loadContext($)
   await refreshStatus($, fresh)
@@ -237,7 +245,7 @@ function inferred(files: ReadonlySet<string>, slicesText: string): { size: Size;
   }
   if (files.has('design.md')) return { size, phase: 'slice', slice: 0 }
   if (files.has('spec.md')) return { size, phase: 'design', slice: 0 }
-  return { size, phase: firstPhase(size, false), slice: 0 }
+  return { size, phase: 'intake', slice: 0 }
 }
 
 async function adopt($: EngineInterface, session: Session): Promise<string> {

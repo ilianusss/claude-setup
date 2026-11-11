@@ -19,14 +19,14 @@ Every workflow starts with the intake, where Claude asks what you want. In a pro
 | --- | --- |
 | `/workflow` | The workflows of this repo: phase, slice, status, age, which one is on the current branch |
 | `/workflow all` | Open workflows in every repo on this machine |
-| `/workflow new <title>` | Asks the size and whether to commit after each slice, then creates a worktree next to the repo on `feat/<slug>`, where you start a session and run `/workflow continue`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the first phase there |
+| `/workflow new <title>` | Asks the size, whether to commit after each slice and whether to start the next slice without asking (`auto_next`), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
 | `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named; offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
 | `/workflow next` | Clears the context, then continues: the one command between slices |
 | `/workflow pause` | Claude writes the handoff, then stops |
 | `/workflow unlock <file> <reason>` | You unlock a locked test yourself |
 | `/workflow done <slug>` | Closes it; a project is offered its retro first |
 | `/workflow abandon <slug> <reason>` | Closes it with the reason |
-| `/workflow adopt` | Sets up a project without `workflow.json`, and rebuilds workflows from spec folders whose state was lost (a fresh clone) |
+| `/workflow adopt` | Sets up a project without `workflow.json`, and rebuilds workflows from spec folders whose state was lost (a fresh clone). The phase follows the documents there; a folder without `spec.md`, `design.md` or `slices.md` starts again at the intake |
 
 The status line shows the workflow on the current branch: `workflow login: build 2/5, tests locked`.
 
@@ -59,11 +59,11 @@ The conversation spawns the `workflow:build` agent for the slice and relays its 
 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
 
-**`auto_next`**: with `auto_next: yes` in the state file, the next slice starts by itself after a verified one. It is off by default. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
+**`auto_next`**: with `auto_next: yes` in the state file, the next slice starts by itself after a verified one. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
 
 ## Several workflows at once
 
-- One workflow, one branch, one worktree. `/workflow new` never works in the main checkout, which may hold your own changes; start a session in the worktree it creates.
+- One workflow, one branch, one worktree. `/workflow new` never works in the main checkout, which may hold your own changes; Claude moves the session into the worktree it creates.
 - The state lives in the repo's `.git`, shared by every worktree, so `/workflow` lists everything from anywhere.
 - ADRs are named by date, so two branches never collide on a number.
 

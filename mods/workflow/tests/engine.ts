@@ -44,6 +44,7 @@ export type Fake = {
   behind: number
   gitLog: string
   prompts: string[]
+  fills: string[]
   commands: string[]
   statuses: Array<string | undefined>
   toasts: string[]
@@ -134,6 +135,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     behind: 0,
     gitLog: '',
     prompts: [],
+    fills: [],
     commands: [],
     statuses: [],
     toasts: [],
@@ -207,6 +209,10 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('prompt.submit', (_, e) => {
     fake.prompts.push(e.text)
     return { text: e.text }
+  })
+  on('prompt.fill', (_, e) => {
+    fake.fills.push(e.text)
+    return { isFilled: true }
   })
   on('ui.status', (_, e) => {
     fake.statuses.push(e.text)

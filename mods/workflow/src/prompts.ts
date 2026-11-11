@@ -149,6 +149,15 @@ export async function setupPrompt($: EngineInterface): Promise<string> {
   ].join('\n\n')
 }
 
+export function enterWorktreePrompt(workflow: Workflow, intake: string): string {
+  return joined([
+    '# Move into the worktree',
+    `The workflow \`${workflow.slug}\` runs in its own worktree. Call the EnterWorktree tool with \`path\` set to \`${workflow.worktree}\`. Once you are in it, start the intake below.`,
+    `If EnterWorktree is refused or fails, do not start the intake: tell the user to start a session in \`${workflow.worktree}\` and run \`/workflow continue ${workflow.slug}\` there.`,
+    intake,
+  ])
+}
+
 export function pausePrompt(workflow: Workflow): string {
   return `Pause the workflow \`${workflow.slug}\`: call mcp__workflow__handoff now with where you stopped, the next concrete action and any open questions. Then stop and tell the user it is paused and how to resume (\`/workflow continue ${workflow.slug}\`).`
 }

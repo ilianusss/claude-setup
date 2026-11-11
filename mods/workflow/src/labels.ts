@@ -10,6 +10,12 @@ export const COMMITS = {
   no: 'No, I commit myself',
 }
 
+export const CHAINING = {
+  question: 'Start the next slice without asking, once a slice is verified?',
+  yes: 'Yes, go straight on',
+  no: 'No, ask me after each slice',
+}
+
 export const BRANCH = {
   create: (branch: string) => `Create ${branch}`,
   stay: (branch: string) => `Stay on ${branch}`,

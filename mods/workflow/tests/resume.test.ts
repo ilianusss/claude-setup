@@ -151,6 +151,26 @@ describe('/workflow adopt', () => {
     expect(ran.text).toContain('login')
   })
 
+  test('rebuilds a spec folder that holds no document into the intake, with an empty goal', async ($, on) => {
+    const fake = fakeEngine(on, { ...buildRepo(), [`${ROOT}/docs/specs/billing/.gitkeep`]: '' }, 'feat/login')
+    fake.answers.push(ADOPT.rebuild)
+    await start($)
+
+    await run($, 'adopt')
+
+    expect(state(fake.files, 'billing')).toMatchObject({ phase: 'intake', goal: '' })
+  })
+
+  test('rebuilds a spec folder with a design into the slice phase', async ($, on) => {
+    const fake = fakeEngine(on, { ...buildRepo(), [`${ROOT}/docs/specs/billing/design.md`]: '# Design\n' }, 'feat/login')
+    fake.answers.push(ADOPT.rebuild)
+    await start($)
+
+    await run($, 'adopt')
+
+    expect(state(fake.files, 'billing').phase).toBe('slice')
+  })
+
   test('runs the setup phase when the project has no workflow.json', async ($, on) => {
     const fake = fakeEngine(on, { [`${ROOT}/README.md`]: '# x' })
     await start($)
