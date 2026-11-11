@@ -2,12 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { WorkflowPicker } from '../types'
-import { registerAgents, stepsOf } from './agents'
+import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
 import { day, iso, submitLater } from './clock'
 import { loadContext } from './context'
 import type { Context } from './context'
 import { PICKER } from './labels'
+import { stepsOf } from './phases'
 import {
   DEFAULT_PLAN,
   EFFORTS,
@@ -29,6 +30,7 @@ import { phasePrompt } from './prompts'
 import { describe } from './refusal'
 import { withLog } from './state'
 import type { Workflow } from './state'
+import { setActivity } from './status'
 import { saveWorkflow } from './store'
 
 export const PICKER_PANE = 'workflow-models'
@@ -148,7 +150,10 @@ async function askPerStep(
 async function openPane($: EngineInterface, steps: readonly Step[]): Promise<boolean> {
   try {
     const opened = await $.ui.open({ id: PICKER_PANE, title: PICKER.title, focus: true, closeOnEscape: true, holdToasts: true, rows: 10 + 3 * steps.length })
-    if (opened.isPlaced) return true
+    if (opened.isPlaced) {
+      await setActivity($, 'waiting')
+      return true
+    }
     $.ui.log(`workflow: the Models panel is not shown (${opened.reason}): each step is asked in a dialog instead.`, { to: 'debug' })
   } catch (error) {
     $.ui.log(`workflow: the Models panel could not open (${describe(error)}): each step is asked in a dialog instead.`, { to: 'debug' })
@@ -164,7 +169,8 @@ export async function chooseModels(
   then: WorkflowPicker['then'],
 ): Promise<Workflow | 'pane'> {
   const steps = stepsOf(workflow, context.config === undefined)
-  await update($, picker, () => ({ slug: workflow.slug, steps, plan: renderPlan(workflow.models), recommendations: [...recommendations], then }))
+  const preselected = then === 'phase' ? withRecommendations(DEFAULT_PLAN, recommendations) : workflow.models
+  await update($, picker, () => ({ slug: workflow.slug, steps, plan: renderPlan(preselected), recommendations: [...recommendations], then }))
   if (await openPane($, steps)) return 'pane'
   await update($, picker, () => null)
   await $.ui.close({ id: PICKER_PANE })

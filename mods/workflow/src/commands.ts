@@ -15,9 +15,9 @@ import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
 import type { Runtime } from './runtime'
 import { parseSlices } from './slices'
-import { slugify, withLog } from './state'
+import { inPhase, slugify, withLog } from './state'
 import type { Phase, Size, Workflow } from './state'
-import { phaseLabel, refreshStatus } from './status'
+import { announcePhase, phaseLabel, refreshStatus } from './status'
 import { openWorkflowsEverywhere, saveWorkflow } from './store'
 import { registerToolsOnce } from './tools'
 
@@ -132,6 +132,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   }
   await saveWorkflow($, context.repo, context.paths, workflow)
   await registerToolsOnce($, runtime)
+  announcePhase($, workflow)
   if (!where.here) {
     submitLater($, enterWorktreePrompt(workflow, await phasePrompt($, context, workflow)))
     return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Claude is moving the session there to start the intake.`
@@ -224,14 +225,15 @@ async function close($: EngineInterface, session: Session, slug: string | undefi
     const answer = await askOrUndefined($, `Run the retro of "${target.slug}" before closing it?`, [RETRO.run, RETRO.close], 'Retro')
     if (answer === undefined) return 'cancelled, nothing changed.'
     if (answer === RETRO.run) {
-      const retro: Workflow = { ...target, phase: 'retro', status: 'active', updated: iso(now) }
+      const retro: Workflow = { ...inPhase(target, 'retro'), status: 'active', updated: iso(now) }
       await saveWorkflow($, context.repo, context.paths, withLog(retro, day(now), 'retro started'))
       await refreshStatus($)
+      announcePhase($, retro)
       submitLater($, await phasePrompt($, context, retro))
       return `starting the retro of "${target.slug}".`
     }
   }
-  const done: Workflow = { ...target, phase: 'done', status: 'done', updated: iso(now) }
+  const done: Workflow = { ...inPhase(target, 'done'), status: 'done', updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, withLog(done, day(now), 'done'))
   await refreshStatus($)
   return `"${target.slug}" is done.`

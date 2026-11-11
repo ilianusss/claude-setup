@@ -106,14 +106,17 @@ describe('the model picker panel', () => {
       await ui.unmount()
     })
 
-    test(`on ${surface}, preselects the current plan and starts the focus on the first picker`, async ($, on) => {
+    test(`on ${surface}, at the intake preselects Claude's recommendations, the defaults elsewhere, and starts the focus on the first picker`, async ($, on) => {
       const fake = fakeEngine(on, INTAKE, 'feat/login')
       await choosingAtIntake($, fake)
 
       const ui = await $.ui.mount({ ...PANE, surface })
 
-      expect((await ui.find({ key: 'model-build' }))?.props.value).toBe('opus')
-      expect((await ui.find({ key: 'effort-build' }))?.props.value).toBe('medium')
+      expect((await ui.find({ key: 'model-build' }))?.props.value).toBe('sonnet')
+      expect((await ui.find({ key: 'effort-build' }))?.props.value).toBe('high')
+      expect((await ui.find({ key: 'effort-review' }))?.props.value).toBe('xhigh')
+      expect((await ui.find({ key: 'model-design' }))?.props.value).toBe('opus')
+      expect((await ui.find({ key: 'effort-design' }))?.props.value).toBe('high')
       expect((await ui.find({ key: 'model-map' }))?.props.autoFocus).toBe(true)
       await ui.unmount()
     })
@@ -122,6 +125,10 @@ describe('the model picker panel', () => {
       const fake = fakeEngine(on, INTAKE, 'feat/login')
       await choosingAtIntake($, fake)
       const ui = await $.ui.mount({ ...PANE, surface })
+      expect(await ui.findAll({ type: 'Text', text: /changed/ })).toHaveLength(2)
+      await ui.select({ key: 'model-build', value: 'opus' })
+      await ui.select({ key: 'effort-build', value: 'medium' })
+      await ui.select({ key: 'effort-review', value: 'high' })
       expect(await ui.find({ type: 'Text', text: /changed/ })).toBeUndefined()
 
       await ui.select({ key: 'model-build', value: 'sonnet' })
@@ -137,6 +144,8 @@ describe('the model picker panel', () => {
       const fake = fakeEngine(on, INTAKE, 'feat/login')
       await choosingAtIntake($, fake)
       const ui = await $.ui.mount({ ...PANE, surface })
+      expect(await ui.findAll({ type: 'Text', text: /hard problems/ })).toHaveLength(1)
+      await ui.select({ key: 'effort-review', value: 'high' })
       expect(await ui.find({ type: 'Text', text: /hard problems/ })).toBeUndefined()
 
       await ui.select({ key: 'effort-design', value: 'xhigh' })
@@ -177,6 +186,8 @@ describe('the model picker panel', () => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     await choosingAtIntake($, fake)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.select({ key: 'effort-build', value: 'medium' })
+    await ui.select({ key: 'effort-review', value: 'high' })
     await ui.select({ key: 'model-build', value: 'sonnet' })
 
     await ui.press({ key: 'use' })

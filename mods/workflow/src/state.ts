@@ -26,6 +26,7 @@ export type Workflow = {
   branch: string
   worktree: string
   slice: number
+  step?: number
   commits: boolean
   autoNext: boolean
   models: ModelPlan
@@ -55,6 +56,11 @@ function oneOf<T extends string>(data: Frontmatter, key: string, allowed: readon
 
 function flag(data: Frontmatter, key: string): boolean {
   return oneOf(data, key, ['yes', 'no']) === 'yes'
+}
+
+function stepOf(data: Frontmatter): number | undefined {
+  const step = Number(data.step)
+  return typeof data.step === 'string' && Number.isInteger(step) && step > 0 ? step : undefined
 }
 
 function list(data: Frontmatter, key: string): string[] {
@@ -95,6 +101,7 @@ export function parseWorkflow(markdown: string): Workflow {
   const slice = Number(text(data, 'slice'))
   if (!Number.isInteger(slice) || slice < 0) throw new Error(`slice is "${text(data, 'slice')}", expected a whole number`)
   const sections = bodySections(body)
+  const step = stepOf(data)
   return {
     slug: text(data, 'slug'),
     title: text(data, 'title'),
@@ -104,6 +111,7 @@ export function parseWorkflow(markdown: string): Workflow {
     branch: text(data, 'branch'),
     worktree: text(data, 'worktree'),
     slice,
+    ...(step === undefined ? {} : { step }),
     commits: flag(data, 'commits'),
     autoNext: flag(data, 'auto_next'),
     models: parsePlan(list(data, 'models')),
@@ -137,6 +145,7 @@ export function renderWorkflow(workflow: Workflow): string {
     branch: workflow.branch,
     worktree: workflow.worktree,
     slice: String(workflow.slice),
+    ...(workflow.step === undefined ? {} : { step: String(workflow.step) }),
     commits: workflow.commits ? 'yes' : 'no',
     auto_next: workflow.autoNext ? 'yes' : 'no',
     models: renderPlan(workflow.models),
@@ -161,6 +170,16 @@ export function phaseAfter(size: Size, phase: Phase, needsSetup = false): Phase 
   const sequence = SEQUENCES[size]
   const index = sequence.indexOf(phase === 'setup' ? 'intake' : phase)
   return index < 0 ? 'done' : (sequence[index + 1] ?? 'done')
+}
+
+export function pipeline(size: Size, withSetup: boolean): Phase[] {
+  const phases = SEQUENCES[size].filter(phase => phase !== 'done')
+  return withSetup ? ['intake', 'setup', ...phases.slice(1)] : phases
+}
+
+// The saved sub-step belongs to the phase it was set in.
+export function inPhase(workflow: Workflow, phase: Phase): Workflow {
+  return { ...workflow, phase, step: undefined }
 }
 
 // The first phase of the work itself: every workflow starts with the intake, which leads here.

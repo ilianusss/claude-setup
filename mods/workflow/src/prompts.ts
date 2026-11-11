@@ -1,9 +1,11 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Config } from './config'
-import { readDoc, readSlices, specsFolder } from './context'
+import { pipelineOf, readDoc, readSlices, specsFolder } from './context'
 import type { Context } from './context'
-import { STEP_SOURCES, readPhase, stepOf } from './phases'
+import { PRODUCES } from './labels'
+import { STEP_SOURCES, readPhase, stepOf, stepsOf } from './phases'
+import { DEFAULT_PLAN, describeChoice } from './plan'
 import type { Step } from './plan'
 import { sections } from './slices'
 import type { Workflow } from './state'
@@ -121,6 +123,28 @@ function agentPart(workflow: Workflow, step: Step | undefined): string | undefin
   return step === 'build' ? buildAgent(workflow) : stepAgent(workflow, step)
 }
 
+function leading(context: Context, workflow: Workflow): string | undefined {
+  if (workflow.phase === 'done') return undefined
+  const phases = pipelineOf(context, workflow)
+  return [
+    '## Leading the user',
+    '',
+    `- Open the phase by telling the user where they are: step ${phases.indexOf(workflow.phase) + 1} of ${phases.length} of this workflow (${phases.join(', ')}), what this phase produces (${PRODUCES[workflow.phase]}), and what they will be asked in it.`,
+    '- Ask every decision the user owns with AskUserQuestion, your recommended option first with "(Recommended)" after its label. Never leave a decision as an open question in chat.',
+    '- End every turn with a line starting "Next:" that says what happens next and whether the user has to act.',
+  ].join('\n')
+}
+
+function defaultModels(context: Context, workflow: Workflow): string {
+  return [
+    '## Default models',
+    '',
+    "Each later step of this workflow runs in its own agent. The mod's default model and effort for each:",
+    '',
+    ...stepsOf(workflow, context.config === undefined).map(step => `- ${step}: ${describeChoice(DEFAULT_PLAN[step])}`),
+  ].join('\n')
+}
+
 function joined(parts: ReadonlyArray<string | undefined>): string {
   return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
 }
@@ -136,8 +160,10 @@ export async function phasePrompt(
   const isBuilding = workflow.phase === 'build'
   return joined([
     ...header(workflow),
+    leading(context, workflow),
     drift,
     doc.body,
+    workflow.phase === 'intake' ? defaultModels(context, workflow) : undefined,
     agentPart(workflow, step),
     standing(workflow),
     files($, specsFolder(context, workflow)),

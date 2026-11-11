@@ -109,7 +109,7 @@ Design: Components, Data model, API contracts, Security model
 Depends on: Slice 4, Slice 5
 
 ## Slice 7: Following along
-- [ ] Done
+- [x] Done
 
 Goal: the user always sees where the workflow stands and whether it waits for them.
 Acceptance criteria:

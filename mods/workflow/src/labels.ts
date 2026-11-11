@@ -1,3 +1,5 @@
+import type { Phase } from './state'
+
 export const SIZE = {
   question: (title: string) => `How big is "${title}"?`,
   feature: 'Feature: several slices in an existing project',
@@ -53,3 +55,14 @@ export const GATE = { approve: 'Continue', stop: 'Stop here', wait: 'Not yet' }
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }
+
+export const PRODUCES: Readonly<Record<Exclude<Phase, 'done'>, string>> = {
+  intake: 'the goal of this workflow, agreed with the user',
+  setup: '.claude/workflow.json, the project CLAUDE.md and its settings',
+  spec: 'spec.md: the product, for whom, and its acceptance criteria',
+  design: 'design.md: the options, the chosen one and why',
+  slice: 'slices.md: the work cut into slices that each ship on their own',
+  build: 'each slice, built test-first with its tests locked',
+  inspect: 'a review of the branch, the fixes the user picks and a pull request draft',
+  retro: 'small changes to the setup, from what this workflow taught',
+}

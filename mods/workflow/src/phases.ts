@@ -18,6 +18,15 @@ export const STEP_SOURCES: Readonly<Record<Step, { phase: Phase; section: AgentS
   review: { phase: 'inspect', section: 'Agent' },
 }
 
+export function stepsOf(workflow: Workflow, needsSetup: boolean): Step[] {
+  return STEPS.filter(
+    step =>
+      (step !== 'map' || workflow.size === 'feature') &&
+      (step !== 'spec' || workflow.size === 'project') &&
+      (step !== 'setup' || needsSetup),
+  )
+}
+
 export function stepOf(phase: Phase): Step | undefined {
   return STEPS.find(step => STEP_SOURCES[step].phase === phase && STEP_SOURCES[step].section === 'Agent')
 }
@@ -27,7 +36,11 @@ export type PhaseDoc = {
   preamble: string
   body: string
   agents: Partial<Record<AgentSection, string>>
+  steps: string[]
 }
+
+const WITH_THE_USER = '## With the user'
+const NUMBERED_STEP = /^\d+\. \*\*([^*]+)\*\*/
 
 const loaded = new Map<string, PhaseDoc>()
 
@@ -56,13 +69,32 @@ function splitAgents(text: string): Pick<PhaseDoc, 'preamble' | 'body' | 'agents
   }
 }
 
+function withTheUser(text: string): string[] {
+  const lines = text.split('\n')
+  const start = lines.findIndex(line => line.trim() === WITH_THE_USER)
+  if (start < 0) return []
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
+  return lines.slice(start + 1, end < 0 ? undefined : end)
+}
+
+export function subSteps(text: string): string[] {
+  return withTheUser(text)
+    .map(line => NUMBERED_STEP.exec(line)?.[1])
+    .filter((title): title is string => title !== undefined)
+    .map(title => title.trim().replace(/[.:]+$/, '').toLowerCase())
+}
+
 export async function readPhase($: EngineInterface, phase: Phase): Promise<PhaseDoc> {
   const path = `${$.plugin.root}/phases/${phase}.md`
   const cached = loaded.get(path)
   if (cached !== undefined) return cached
   const { data, body } = parseFrontmatter(await $.fs.read(path))
   const writes = data.writes
-  const doc = { writes: writes === undefined ? [] : typeof writes === 'string' ? [writes] : [...writes], ...splitAgents(body) }
+  const doc = {
+    writes: writes === undefined ? [] : typeof writes === 'string' ? [writes] : [...writes],
+    ...splitAgents(body),
+    steps: subSteps(body),
+  }
   loaded.set(path, doc)
   return doc
 }

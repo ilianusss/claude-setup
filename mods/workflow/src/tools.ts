@@ -1,21 +1,22 @@
 import type { EngineInterface, On, RegisteredToolSpec } from 'claude-code'
 
-import { registerAgents, stepsOf } from './agents'
+import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
 import { lockSlice, nextStep, unlockFile, verifiedForAgent, verifiedForConversation, verifySlice } from './build'
 import { day, iso, submitLater } from './clock'
 import { loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { GATE, MODELS } from './labels'
+import { readPhase, stepsOf } from './phases'
 import { chooseModels, rememberRecommendations, savePlan } from './picker'
 import { DEFAULT_PLAN, EFFORTS, MODELS as MODEL_NAMES, STEPS, parseRecommendations, withRecommendations } from './plan'
 import type { ModelPlan, Recommendation } from './plan'
 import { phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import type { Runtime } from './runtime'
-import { phaseAfter, withLog } from './state'
+import { inPhase, phaseAfter, withLog } from './state'
 import type { Workflow } from './state'
-import { refreshStatus } from './status'
+import { announcePhase, clearVerified, markVerified, refreshStatus, turnEnded } from './status'
 import { saveWorkflow } from './store'
 
 const TOOLS: readonly RegisteredToolSpec[] = [
@@ -96,6 +97,19 @@ const TOOLS: readonly RegisteredToolSpec[] = [
         reason: { type: 'string', description: 'Why the test is wrong, with the evidence.' },
       },
       required: ['file', 'reason'],
+    },
+    isDeferred: false,
+  },
+  {
+    name: 'progress',
+    description:
+      "Tell the user which numbered step of the current phase's \"With the user\" section you are starting. The band above the prompt shows it. Not in build or inspect, whose steps the mod follows itself.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        step: { type: 'integer', minimum: 1, description: 'The number of the step you are starting, as the phase instructions number it.' },
+      },
+      required: ['step'],
     },
     isDeferred: false,
   },
@@ -197,8 +211,9 @@ async function advance($: EngineInterface, context: Context, input: Record<strin
 
   const choice = workflow.phase === 'intake' && answer === GATE.approve ? await askPlan($, workflow, recommendations) : workflow.models
   const status = target === 'done' ? 'done' : answer === GATE.stop ? 'paused' : workflow.status
-  let moved: Workflow = withLog({ ...workflow, phase: target, slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
+  let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
   await saveWorkflow($, context.repo, context.paths, moved)
+  if (answer === GATE.approve) announcePhase($, moved)
   if (choice !== 'per step') moved = await savePlan($, context, moved, choice, now)
   else {
     const chosen = await chooseModels($, context, moved, recommendations, 'phase')
@@ -214,6 +229,22 @@ async function advance($: EngineInterface, context: Context, input: Record<strin
   if (target === 'done') return `Approved: "${workflow.slug}" is done.`
   if (answer === GATE.stop) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
   return `Approved: "${workflow.slug}" is now in its ${target} phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`
+}
+
+async function progress($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
+  const workflow = currentOf(context)
+  if (workflow.phase === 'build' || workflow.phase === 'inspect') {
+    refuse(`the mod follows the steps of the ${workflow.phase} phase itself: do not call mcp__workflow__progress in it.`)
+  }
+  const steps = (await readPhase($, workflow.phase)).steps
+  const step = input.step
+  if (typeof step !== 'number' || !Number.isInteger(step) || step < 1 || step > steps.length) {
+    refuse(
+      `step must be a whole number from 1 to ${steps.length}, a numbered step of the ${workflow.phase} phase's "With the user" section; got ${JSON.stringify(step)}. Nothing changed.`,
+    )
+  }
+  await saveWorkflow($, context.repo, context.paths, { ...workflow, step, updated: iso(now) })
+  return `Step ${step} of ${steps.length} of the ${workflow.phase} phase: ${steps[step - 1]}.`
 }
 
 type ToolAnswer = { result: string } | { deny: string }
@@ -249,9 +280,19 @@ async function advanceTool($: EngineInterface, input: Record<string, unknown>): 
   }
 }
 
+async function progressTool($: EngineInterface, input: Record<string, unknown>): Promise<ToolAnswer> {
+  try {
+    return await answered($, await progress($, await contextOf($), input, await $.clock.now()))
+  } catch (error) {
+    return failure(error)
+  }
+}
+
 async function lockTool($: EngineInterface): Promise<ToolAnswer> {
   try {
-    return await answered($, await lockSlice($, await contextOf($), await $.clock.now()))
+    const locked = await lockSlice($, await contextOf($), await $.clock.now())
+    await clearVerified($)
+    return await answered($, locked)
   } catch (error) {
     return failure(error)
   }
@@ -261,6 +302,8 @@ async function verifyTool($: EngineInterface, runtime: Runtime, agentId: string 
   try {
     const context = await contextOf($)
     const verified = await verifySlice($, context, await $.clock.now())
+    if (verified.advanced.phase === 'inspect') announcePhase($, verified.advanced)
+    else await markVerified($, verified.advanced, verified.slice)
     await registerAgents($)
     if (agentId === undefined) return await answered($, await verifiedForConversation($, context, verified))
     runtime.handovers.set(agentId, verified.advanced.slug)
@@ -275,6 +318,7 @@ async function handOver($: EngineInterface, runtime: Runtime, agentId: string): 
   if (slug === undefined) return
   runtime.handovers.delete(agentId)
   try {
+    await clearVerified($)
     const context = await contextOf($)
     const workflow = context.workflows.find(candidate => candidate.slug === slug)
     if (workflow === undefined) return
@@ -316,9 +360,13 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
   on('tool.call', { tool: 'mcp__workflow__unlock' }, ($, e) =>
     e.agentId === undefined ? unlockTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
+  on('tool.call', { tool: 'mcp__workflow__progress' }, ($, e) =>
+    e.agentId === undefined ? progressTool($, inputOf(e)) : refusedInStepAgent(e.tool),
+  )
   on('turn.complete', async ($, e, next) => {
     const ended = await next(e)
     if (e.agentId !== undefined) await handOver($, runtime, e.agentId)
+    else await turnEnded($)
     return ended
   })
 }

@@ -3,8 +3,8 @@ import type { AgentSpec, EngineInterface } from 'claude-code'
 import { loadContext } from './context'
 import type { Context } from './context'
 import { withoutFrontmatter } from './frontmatter'
-import { STEPS } from './plan'
 import type { ModelChoice, Step } from './plan'
+import { stepsOf } from './phases'
 import { agentInstructions } from './prompts'
 import { describe } from './refusal'
 import type { Workflow } from './state'
@@ -42,15 +42,6 @@ export function buildAgentSpec(step: Step, choice: ModelChoice, instructions: st
     disallowedTools: WITHHELD_TOOLS,
     ...(step === 'review' ? { tools: REVIEW_TOOLS } : {}),
   }
-}
-
-export function stepsOf(workflow: Workflow, needsSetup: boolean): Step[] {
-  return STEPS.filter(
-    step =>
-      (step !== 'map' || workflow.size === 'feature') &&
-      (step !== 'spec' || workflow.size === 'project') &&
-      (step !== 'setup' || needsSetup),
-  )
 }
 
 function inRegistrationOrder(steps: readonly Step[]): Step[] {

@@ -7,6 +7,8 @@ Goal: the current slice, built test-first, with its tests locked between red and
 
 ## With the user
 
+The mod follows this phase's steps itself and shows them above the prompt: do not call `mcp__workflow__progress` in it.
+
 1. **Spawn.** Spawn `workflow:build` for the current slice, as the build agent section below says, and wait for its report. Do not write the tests or the code yourself.
 2. **Relay.** Give the user its report: what it built, each check and its result, whether `mcp__workflow__verify` closed the slice, and its open questions.
 3. **Questions.** When the agent stopped on a test it believes wrong, put its evidence to the user and call `mcp__workflow__unlock` with the reason: the user decides. When it stopped on another question, ask the user, then spawn it again with the answer.

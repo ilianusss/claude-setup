@@ -7,6 +7,8 @@ Goal: a `design.md` that settles how the approved spec (or, for a feature, the r
 
 ## With the user
 
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+
 1. **Research.** Spawn `workflow:design` to read the spec and the code the change touches, check versions and dependencies, and return the drivers it sees and the technical questions that matter. For a feature without a spec, it also drafts the "Problem and acceptance criteria" section: get it confirmed by the user first.
 2. **Ask** the technical questions that matter, the agent's among them, in batches (`guides/technical-questions.md`), and settle the drivers with the user: the quality attributes and constraints that decide between options.
 3. **Options.** Spawn `workflow:design` with the answers to propose two or three real options with a trade-off table against the drivers and a recommendation (`guides/decision-guide.md`). Put them to the user in AskUserQuestion, the recommended one first. The user chooses.

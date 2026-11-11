@@ -60,7 +60,7 @@ describe('lock', () => {
     await lockedSlice($, fake)
 
     expect(JSON.parse(fake.files.get(LOCK_FILE) ?? '{}')).toMatchObject({ phase: 'green', sliceFiles: ['src/cart.test.ts'] })
-    expect(fake.statuses.at(-1)).toBe('workflow login: build 1/2, tests locked')
+    expect(fake.statuses.at(-1)).toBe('workflow login: build 1/2, opus medium, waiting for you')
   })
 
   test('a passing run does not count as red', async ($, on) => {

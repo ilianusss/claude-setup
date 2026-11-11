@@ -269,6 +269,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     fake.closed.push(e.id)
     return { value: undefined }
   })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
   return fake
 }
 

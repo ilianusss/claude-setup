@@ -7,6 +7,8 @@ Goal: an independent review of the whole branch, the fixes the user picks, and a
 
 ## With the user
 
+The mod follows this phase's steps itself and shows them above the prompt: do not call `mcp__workflow__progress` in it.
+
 1. **Review in fresh contexts:**
    - Spawn `workflow:review` with the base branch and the lenses: spec and quality always, security when the change touches a surface in the trigger table of `writing-secure-code`. It reads this workflow's documents, returns findings and never edits.
    - Run the `code-review` skill on the branch for correctness bugs, at the low or medium level.

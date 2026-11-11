@@ -15,7 +15,7 @@ import { phasePrompt, spawnBuild, stopPrompt } from './prompts'
 import { refuse } from './refusal'
 import { changedFiles, relativeTo, treeHash } from './repo'
 import { addRun, readLock, readRuns, saveLock, saveWorkflow } from './store'
-import { withLog } from './state'
+import { inPhase, withLog } from './state'
 import type { Workflow } from './state'
 
 const EXIT_CODE = /^Exit code (\d+)/
@@ -199,7 +199,7 @@ export async function verifySlice(
 
   const slices = await readSlices($, context, workflow)
   const isLast = !slices.some(slice => slice.number > workflow.slice)
-  const next: Workflow = isLast ? { ...workflow, phase: 'inspect' } : { ...workflow, slice: workflow.slice + 1 }
+  const next: Workflow = isLast ? inPhase(workflow, 'inspect') : { ...workflow, slice: workflow.slice + 1 }
   const advanced = withLog({ ...next, updated: iso(now) }, day(now), `slice ${workflow.slice} verified`)
   await saveWorkflow($, context.repo, context.paths, advanced)
 

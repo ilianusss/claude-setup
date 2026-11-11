@@ -1,6 +1,7 @@
 import type { Register } from 'claude-code'
 
 import { registerAgents } from '../src/agents'
+import { registerBanner } from '../src/banner'
 import { registerCommand, registerCommands } from '../src/commands'
 import { loadContext } from '../src/context'
 import { registerGuards } from '../src/guards'
@@ -16,6 +17,7 @@ export const register: Register = on => {
   registerToolHandlers(on, runtime)
   registerGuards(on)
   registerPicker(on)
+  registerBanner(on)
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)

@@ -7,6 +7,8 @@ Goal: `slices.md`, the work cut into vertical slices: each a thin path through e
 
 ## With the user
 
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+
 1. **Spawn** `workflow:slice` to cut the approved design into `slices.md`, and wait for its report.
 2. **Go through the slices** with the user: each one's goal and acceptance criteria, and why this order. When the user wants a change, spawn the agent again with it.
 3. **Issues, if wanted.** Ask whether to file the slices as GitHub issues; on yes, spawn `workflow:slice` to file them.

@@ -7,6 +7,8 @@ Goal: a one-page `spec.md` the user agrees describes the product: the problem, f
 
 ## With the user
 
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+
 1. **Restate** the idea in three to five lines and ask whether that is it.
 2. **Ask** in batches of at most four questions with AskUserQuestion, using `guides/product-questions.md`. Offer options with a recommended one where you can. Never fill a gap with a guess: what stays unanswered goes in Open questions.
 3. **Draft.** Spawn `workflow:spec` with the answers so far. It writes `spec.md` and returns its open questions: ask them in the next batch, then spawn it again with the answers.

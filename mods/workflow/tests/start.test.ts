@@ -225,7 +225,7 @@ describe('status', () => {
     await start($)
 
     expect(fake.toasts.join('\n')).toContain('login (design, 3 days ago)')
-    expect(fake.statuses.at(-1)).toBe('workflow login: design')
+    expect(fake.statuses.at(-1)).toBe('workflow login: design, opus high, waiting for you')
     expect(fake.tools).toContain('mcp__workflow__handoff')
   })
 

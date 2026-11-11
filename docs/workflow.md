@@ -29,7 +29,23 @@ Every workflow starts with the intake, where Claude asks what you want. In a pro
 | `/workflow abandon <slug> <reason>` | Closes it with the reason |
 | `/workflow adopt` | Sets up a project without `workflow.json`, and rebuilds workflows from spec folders whose state was lost (a fresh clone). The phase follows the documents there; a folder without `spec.md`, `design.md` or `slices.md` starts again at the intake |
 
-The status line shows the workflow on the current branch: `workflow login: build 2/5, tests locked`.
+## Following along
+
+While a workflow runs on the current branch, a band above the prompt shows where it stands, on two lines:
+
+```text
+intake  design  slice  build 2/5  inspect
+build 2/5: tests locked · opus medium · waiting for you
+```
+
+- The first line lists the steps of this workflow in order: intake, setup while the project has no `.claude/workflow.json` (it leaves the line once written), spec and retro for a project. The current step is bold and coloured, the others dim, with no done markers. Build carries the slice count.
+- The second line is the current sub-step, the model and effort of whoever does it (the step's agent from the plan, or "conversation" for the intake and the retro), and "working" or "waiting for you". In a narrow terminal the band drops the steps before the current one, then shortens the sub-step, then the model: "waiting for you" always shows.
+- The sub-steps are the numbered bold steps of the phase file's "With the user" section (`1. **Read**` gives "read"). Claude calls `mcp__workflow__progress { step }` as it starts each one; the mod saves it as `step` in the state, so a resumed workflow shows it, and clears it when the phase changes. It is refused out of range, from a step agent, and in build and inspect, whose sub-step the mod names itself: "writing tests", "tests locked", then "slice N verified" until the build agent's run ends; "review" in inspect.
+- "Working" runs from a submitted prompt to the end of the conversation's turn; "waiting for you" after it, and while one of the mod's dialogs or the Models panel is open. A step agent's turns do not change it.
+
+The status line carries the same data: `workflow login: build 2/5, opus medium, waiting for you`. A dim transcript line marks the start of each phase with what it produces.
+
+Every phase prompt also carries the "Leading the user" rules: Claude opens a phase by saying where you are (step k of n), what it produces and what you will be asked; asks every decision that is yours in a dialog, its recommended option first; and ends every turn with a "Next:" line saying what happens next and whether you have to act.
 
 ## The phases
 
@@ -119,7 +135,7 @@ Only you set the plan. Before the intake's gate, Claude follows `choosing-model-
 
 - "Use the defaults" saves the default plan.
 - "Use Claude's recommendations" saves the defaults with the recommendations over them (offered only when Claude gave some).
-- "Choose per step" opens the Models panel, a focused dialog with one row per step of this workflow in pipeline order: a model and an effort picker on the current plan, the recommended values marked "(recommended)", "changed from <default>" on a row that differs from the default, and Claude's recommendation with its reason in a dim line beneath. Picking `xhigh` adds a one-line warning. Tab moves between the pickers and buttons, Enter picks, `u` or "Use these" saves, `r` or "Reset to recommended" puts the recommended values back, Esc or "Cancel" keeps the plan as it was. Fable and `max` are never offered. The conversation waits while the panel is open; the mod sends it the next phase's prompt once you confirm or cancel.
+- "Choose per step" opens the Models panel, a focused dialog with one row per step of this workflow in pipeline order: a model and an effort picker on Claude's recommendations (the defaults where it gave none), the recommended values marked "(recommended)", "changed from <default>" on a row that differs from the default, and Claude's recommendation with its reason in a dim line beneath. Picking `xhigh` adds a one-line warning. Tab moves between the pickers and buttons, Enter picks, `u` or "Use these" saves, `r` or "Reset to recommended" puts the recommended values back, Esc or "Cancel" keeps the plan as it was. Fable and `max` are never offered. The conversation waits while the panel is open; the mod sends it the next phase's prompt once you confirm or cancel.
 - Where the panel cannot be shown (opened from a tool on a terminal under 144 columns, say), the same choice runs as one dialog per step: the recommended value marked "(Recommended)", the default when different, one cheaper and one stronger option, and "Other" for a typed `model effort` such as `sonnet high`, asked again until it names an allowed pair. Closing a dialog keeps the plan.
 - Closing the question keeps the plan.
 
