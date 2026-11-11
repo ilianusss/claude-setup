@@ -75,7 +75,7 @@ Design: Problem and acceptance criteria, API contracts, Key flows, Security mode
 Depends on: Slice 1
 
 ## Slice 5: Every step runs in its agent
-- [ ] Done
+- [x] Done
 
 Goal: the conversation talks, the agents work, in every phase.
 Acceptance criteria:

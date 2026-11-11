@@ -3,7 +3,8 @@ import type { EngineInterface } from 'claude-code'
 import type { Config } from './config'
 import { readDoc, readSlices, specsFolder } from './context'
 import type { Context } from './context'
-import { readPhase } from './phases'
+import { STEP_SOURCES, readPhase, stepOf } from './phases'
+import type { Step } from './plan'
 import { sections } from './slices'
 import type { Workflow } from './state'
 
@@ -51,12 +52,14 @@ function checks(config: Config | undefined): string | undefined {
   ].join('\n')
 }
 
+function missingSlice(workflow: Workflow): string {
+  return `## Slice ${workflow.slice}\n\n\`slices.md\` has no slice ${workflow.slice}. Tell the user, and stop.`
+}
+
 async function currentSlice($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
   const slices = await readSlices($, context, workflow)
   const slice = slices.find(candidate => candidate.number === workflow.slice)
-  if (slice === undefined) {
-    return `## Slice ${workflow.slice}\n\n\`slices.md\` has no slice ${workflow.slice}. Tell the user, and stop.`
-  }
+  if (slice === undefined) return missingSlice(workflow)
   const design = (await readDoc($, context, workflow, 'design.md')) ?? ''
   const needed = sections(design, slice.designSections)
   return [
@@ -70,6 +73,17 @@ async function currentSlice($: EngineInterface, context: Context, workflow: Work
   ].join('\n')
 }
 
+async function sliceNamed($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
+  const slices = await readSlices($, context, workflow)
+  const slice = slices.find(candidate => candidate.number === workflow.slice)
+  if (slice === undefined) return missingSlice(workflow)
+  return [
+    '## This slice',
+    '',
+    `Slice ${slice.number}: ${slice.name} (${slice.number} of ${slices.length}). The build agent holds its text, its design sections and the checks.`,
+  ].join('\n')
+}
+
 function header(workflow: Workflow): string[] {
   const slice = workflow.phase === 'build' ? `, slice ${workflow.slice}` : ''
   return [
@@ -80,26 +94,32 @@ function header(workflow: Workflow): string[] {
 
 export function spawnBuild(workflow: Workflow): string {
   const { model, effort } = workflow.models.build
-  return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks. Wait for it, then relay its report to the user: what it built, each check and its result, the answer of mcp__workflow__verify, and its open questions.`
+  return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks. Wait for it, then relay its report to the user: what it built, each check and its result, whether mcp__workflow__verify closed the slice, and its open questions.`
 }
 
 function buildAgent(workflow: Workflow): string {
-  return ['## The build agent', '', spawnBuild(workflow)].join('\n')
+  return [
+    '## The build agent',
+    '',
+    spawnBuild(workflow),
+    '',
+    'Once its run ends after a verified slice, the mod sends you the next step in a message of its own: end your turn after the relay and wait for it.',
+  ].join('\n')
 }
 
-const INTAKE_STEPS = [
-  '## The intake steps',
-  '',
-  '1. **Ask** the user, in their words:',
-  '   - The problem: what is wrong or missing today, and for whom.',
-  '   - The result wanted: what exists once this workflow is done.',
-  '   - How success will show: what the user will see, run or measure to know it worked.',
-  '   - The limits: time, technology, compatibility, and what must not change.',
-  '   - Out of scope: what this workflow will not do.',
-  '2. **Restate** your understanding in a few lines, one per point above, and ask the user to confirm it or correct it. Restate again after each correction, until they confirm.',
-  '3. **Save.** Call mcp__workflow__handoff with `goal` set to the confirmed restatement, and the next action.',
-  '4. **Gate.** Call mcp__workflow__advance with the confirmed restatement as the summary.',
-].join('\n')
+function stepAgent(workflow: Workflow, step: Step): string {
+  const { model, effort } = workflow.models[step]
+  return [
+    '## The agent',
+    '',
+    `This phase's work runs in \`workflow:${step}\`, on ${model} with ${effort} effort. Spawn it with the Agent tool, in the foreground, at each step above that names it, with a prompt that says which part to do and carries the user's answers it needs: it already holds its instructions and this workflow's documents folder. Wait for it, then relay its report to the user and ask them its open questions. Do its work yourself only when it cannot run.`,
+  ].join('\n')
+}
+
+function agentPart(workflow: Workflow, step: Step | undefined): string | undefined {
+  if (step === undefined) return undefined
+  return step === 'build' ? buildAgent(workflow) : stepAgent(workflow, step)
+}
 
 function joined(parts: ReadonlyArray<string | undefined>): string {
   return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
@@ -112,41 +132,47 @@ export async function phasePrompt(
   drift?: string,
 ): Promise<string> {
   const doc = await readPhase($, workflow.phase)
-  const specs = specsFolder(context, workflow)
-  const parts = [
+  const step = doc.agents.Agent === undefined ? undefined : stepOf(workflow.phase)
+  const isBuilding = workflow.phase === 'build'
+  return joined([
     ...header(workflow),
     drift,
     doc.body,
-    workflow.phase === 'intake' ? INTAKE_STEPS : undefined,
-    workflow.phase === 'build' ? buildAgent(workflow) : undefined,
+    agentPart(workflow, step),
     standing(workflow),
-    files($, specs),
-    workflow.phase === 'build' ? await currentSlice($, context, workflow) : undefined,
-    workflow.phase === 'build' ? checks(context.config) : undefined,
-  ]
-  return joined(parts)
+    files($, specsFolder(context, workflow)),
+    isBuilding ? await sliceNamed($, context, workflow) : undefined,
+  ])
 }
 
-export async function agentInstructions($: EngineInterface, context: Context, workflow: Workflow): Promise<string | undefined> {
-  const doc = await readPhase($, workflow.phase)
-  if (doc.agent === undefined) return undefined
+export async function agentInstructions(
+  $: EngineInterface,
+  context: Context,
+  workflow: Workflow,
+  step: Step,
+): Promise<string | undefined> {
+  const source = STEP_SOURCES[step]
+  const section = (await readPhase($, source.phase)).agents[source.section]
+  if (section === undefined) return undefined
+  const isBuilding = step === 'build' && workflow.phase === 'build'
   return joined([
     ...header(workflow),
-    doc.agent,
+    section,
     files($, specsFolder(context, workflow)),
-    workflow.phase === 'build' ? await currentSlice($, context, workflow) : undefined,
-    workflow.phase === 'build' ? checks(context.config) : undefined,
+    isBuilding ? await currentSlice($, context, workflow) : undefined,
+    isBuilding ? checks(context.config) : undefined,
   ])
 }
 
 export async function setupPrompt($: EngineInterface): Promise<string> {
   const doc = await readPhase($, 'setup')
-  return [
+  return joined([
     '# Workflow setup',
-    'This project has no `.claude/workflow.json` yet. Set it up so workflows can run here.',
-    doc.body,
+    'This project has no `.claude/workflow.json` yet. Set it up so workflows can run here. No workflow runs yet, so no agent does it for you: do the work below yourself, ask the user in one AskUserQuestion batch what only they know (the test level, the invariants that must never break, the conventions you are unsure of), then show them the three files to review.',
+    doc.preamble,
+    doc.agents.Agent ?? doc.body,
     `Templates: \`${$.plugin.root}/templates/\``,
-  ].join('\n\n')
+  ])
 }
 
 export function enterWorktreePrompt(workflow: Workflow, intake: string): string {

@@ -153,11 +153,13 @@ export async function lockSlice($: EngineInterface, context: Context, now: numbe
   ].join('\n')
 }
 
+export type Verified = { slice: number; closing: string[]; advanced: Workflow }
+
 export async function verifySlice(
   $: EngineInterface,
   context: Context,
   now: number,
-): Promise<string> {
+): Promise<Verified> {
   const workflow = inBuild(context)
   const config = configOf(context)
   const lock = await readLock($, context.paths, workflow.slug)
@@ -197,25 +199,42 @@ export async function verifySlice(
 
   const slices = await readSlices($, context, workflow)
   const isLast = !slices.some(slice => slice.number > workflow.slice)
-  const advanced: Workflow = isLast ? { ...workflow, phase: 'inspect' } : { ...workflow, slice: workflow.slice + 1 }
-  await saveWorkflow($, context.repo, context.paths, withLog({ ...advanced, updated: iso(now) }, day(now), `slice ${workflow.slice} verified`))
+  const next: Workflow = isLast ? { ...workflow, phase: 'inspect' } : { ...workflow, slice: workflow.slice + 1 }
+  const advanced = withLog({ ...next, updated: iso(now) }, day(now), `slice ${workflow.slice} verified`)
+  await saveWorkflow($, context.repo, context.paths, advanced)
 
-  return [
-    `Slice ${workflow.slice} verified.`,
-    '',
+  const closing = [
     `1. Tick slice ${workflow.slice} in \`${specsFolder(context, workflow)}/slices.md\`.`,
     workflow.commits
       ? '2. Commit the slice, following the following-git-conventions skill.'
       : '2. Do not commit: in this workflow the user commits.',
-    '3. If you are the build agent, stop after these steps and put this whole answer in your report: what follows is for the conversation.',
+  ]
+  return { slice: workflow.slice, closing, advanced }
+}
+
+export async function verifiedForConversation($: EngineInterface, context: Context, verified: Verified): Promise<string> {
+  return [
+    `Slice ${verified.slice} verified.`,
     '',
-    '## Next, for the conversation',
+    ...verified.closing,
     '',
-    await nextStep($, context, advanced),
+    '## Next',
+    '',
+    await nextStep($, context, verified.advanced),
   ].join('\n')
 }
 
-async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<string> {
+export function verifiedForAgent(verified: Verified): string {
+  return [
+    `Slice ${verified.slice} verified: finish your report. Before it:`,
+    '',
+    ...verified.closing,
+    '',
+    'The next slice is not yours: the mod hands the next step to the conversation once your run ends.',
+  ].join('\n')
+}
+
+export async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<string> {
   if (advanced.phase === 'inspect') {
     return `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`
   }
@@ -224,6 +243,8 @@ async function nextStep($: EngineInterface, context: Context, advanced: Workflow
   if (answer === NEXT_SLICE.start(advanced.slice)) {
     return `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}`
   }
+  const now = await $.clock.now()
+  await saveWorkflow($, context.repo, context.paths, withLog({ ...advanced, status: 'paused', updated: iso(now) }, day(now), 'paused'))
   return `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}`
 }
 

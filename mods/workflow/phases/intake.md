@@ -3,11 +3,20 @@ writes: []
 ---
 # The intake phase
 
-Goal: what the user wants from this workflow, in their words and confirmed by them. Every later phase starts from this goal, so it is asked of the user, not guessed. The phase writes no file: the goal goes into the workflow state through `mcp__workflow__handoff`, and the mod refuses every Edit and Write in the repo until the next phase.
+Goal: what the user wants from this workflow, in their words and agreed by them. Every later phase starts from this goal, so it is asked of the user, not guessed. The phase writes no file: the goal goes into the workflow state through `mcp__workflow__handoff`, and the mod refuses every Edit and Write in the repo until the next phase. It runs in the conversation, with no agent.
 
 ## With the user
 
-Read the workflow title, and the project CLAUDE.md and README when you do not know the project yet, so you ask only what only the user knows. Then follow the intake steps below.
+1. **Read** the workflow title, and the project CLAUDE.md and README when you do not know the project yet, so you ask only what only the user knows.
+2. **Ask** the user, in their words:
+   - The problem: what is wrong or missing today, and for whom.
+   - The result wanted: what exists once this workflow is done.
+   - How success will show: what the user will see, run or measure to know it worked.
+   - The limits: time, technology, compatibility, and what must not change.
+   - Out of scope: what this workflow will not do.
+3. **Restate** your understanding in a few lines, one per point above, and ask the user to confirm it or correct it. Restate again after each correction, until they confirm.
+4. **Save.** Call mcp__workflow__handoff with `goal` set to the confirmed restatement, and the next action.
+5. **Gate.** Call mcp__workflow__advance with the confirmed restatement as the summary.
 
 Rules:
 

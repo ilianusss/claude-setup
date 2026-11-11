@@ -36,6 +36,30 @@ Talk the user through the slice.
 Do the build work.
 `
 
+export const INTAKE_PHASE = `# The intake phase
+
+## With the user
+
+1. **Ask** the user, in their words:
+   - The problem: what is wrong or missing today.
+   - The result wanted: what exists once this workflow is done.
+   - How success will show: what the user will see.
+   - The limits: what must not change.
+   - Out of scope: what this workflow will not do.
+2. **Restate** your understanding and ask the user to confirm it.
+3. **Save.** Call mcp__workflow__handoff with \`goal\` set to the confirmed restatement.
+4. **Gate.** Call mcp__workflow__advance with the confirmed restatement as the summary.
+`
+
+export const REVIEWER_AGENT = '---\nname: reviewer\ntools: Read, Grep, Glob, Bash\nskills:\n  - writing-clean-code\n---\n\nYou review a change you did not write.\n'
+
+const PHASES_WITH_AGENT = ['setup', 'spec', 'design', 'slice', 'inspect']
+
+function phaseWithAgent(name: string): string {
+  const map = name === 'design' ? '\n## Map agent\n\nMap the project.\n' : ''
+  return `# The ${name} phase\n\n## With the user\n\nDo the ${name} work.\n\n## Agent\n\nWork as the ${name} agent.\n${map}`
+}
+
 export type Fake = {
   files: Map<string, string>
   committed: Map<string, string>
@@ -54,6 +78,7 @@ export type Fake = {
   questions: string[]
   bash: Map<string, number>
   shellWrites: Map<string, Record<string, string>>
+  missing: string[]
   trees: Map<string, Map<string, string>>
   clock: MockClock
 }
@@ -118,10 +143,15 @@ function children(fake: Fake, dir: string): Array<{ name: string; kind: 'file' |
 }
 
 function shippedFile(path: string): string | undefined {
+  if (path.endsWith('/agents/reviewer.md')) return REVIEWER_AGENT
   const match = /\/(phases|guides|templates)\/([\w-]+)\.(md|json)$/.exec(path)
   if (match === null) return undefined
   const [, folder, name] = match
   if (folder === 'phases' && name === 'build') return `---\nwrites: ["**"]\n---\n${BUILD_PHASE}`
+  if (folder === 'phases' && name === 'intake') return `---\nwrites: []\n---\n${INTAKE_PHASE}`
+  if (folder === 'phases' && PHASES_WITH_AGENT.includes(name ?? '')) {
+    return `---\nwrites: ${PHASE_WRITES[name ?? ''] ?? '[]'}\n---\n${phaseWithAgent(name ?? '')}`
+  }
   if (folder === 'phases') return `---\nwrites: ${PHASE_WRITES[name ?? ''] ?? '[]'}\n---\n# The ${name} phase\n\nDo the ${name} work.\n`
   return `# ${name}\n`
 }
@@ -145,6 +175,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     questions: [],
     bash: new Map(),
     shellWrites: new Map(),
+    missing: [],
     trees: new Map(),
     clock: mock.clock(on, { now: NOW }),
   }
@@ -154,6 +185,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('session.cwd', () => ({ value: ROOT }))
   on('session.id', () => ({ value: 's1' }))
   on('fs.read', (_, e) => {
+    if (fake.missing.some(suffix => e.path.endsWith(suffix))) throw new Error(`ENOENT: ${e.path}`)
     const text = fake.files.get(e.path) ?? shippedFile(e.path)
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }

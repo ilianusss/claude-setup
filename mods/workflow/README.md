@@ -29,14 +29,14 @@ In a repo, type `/workflow new <title>`. Every workflow starts with an intake, w
 | `/workflow done <slug>`, `/workflow abandon <slug> <reason>` | Close one |
 | `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs (a folder without documents starts at the intake) |
 
-At each gate you answer Continue (Claude goes straight on), Stop here (Claude hands off and stops) or Not yet. After a verified slice, the next one starts in a new `workflow:build` agent, after asking you unless slice chaining is on. The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
+Your conversation talks to you and an agent the mod registers does each step's work (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, the read-only `review`); the intake and the retro stay in the conversation. At each gate you answer Continue (Claude goes straight on), Stop here (Claude hands off, pauses the workflow and stops) or Not yet. When a `workflow:build` agent ends after a verified slice, the mod asks you whether to go on, unless slice chaining is on, and hands the conversation the next step. The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
 
 ## Project structure
 
 ```text
 hooks/        the module Claude Code loads
 src/          commands, tools, guards, state, the test lock
-phases/       what Claude does in each phase, with the files it may write
+phases/       each phase: what the conversation does with you, what its agent does, the files it may write
 guides/       question banks, the decision guide, EARS, the drift check
 templates/    spec, design, slices, ADR, project CLAUDE.md, workflow.json
 tests/        claude plugin test suites, against a fake git and file system

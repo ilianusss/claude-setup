@@ -43,23 +43,39 @@ The status line shows the workflow on the current branch: `workflow login: build
 | inspect | Review findings, the fixes you pick, a pull request draft | The push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
-A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. "Continue" moves the phase and Claude goes straight on with the next one in the same conversation; "Stop here" moves it and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance` and `mcp__workflow__handoff`: the mod refuses both from a step agent.
+A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. "Continue" moves the phase and Claude goes straight on with the next one in the same conversation; "Stop here" moves it, pauses the workflow (`/workflow` lists it as paused) and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance`, `mcp__workflow__handoff` and `mcp__workflow__unlock`: the mod refuses them from a step agent.
+
+## Who does what
+
+Your conversation talks to you; agents do the work. Each phase file has a "With the user" section, which is the conversation's prompt: the questions it asks you in dialogs, which agent to spawn with its model and effort, relaying the agent's report, and the gate. Its "Agent" section is the worker's prompt. The mod registers one agent per step of the workflow's size, each on its plan model and effort, at session start, after a gate, after `/workflow continue` and after a verified slice:
+
+| Agent | Does | Phase |
+| --- | --- | --- |
+| `workflow:map` | Maps the project into a Context section of `design.md` (features only) | design |
+| `workflow:setup` | Reads the project, proves its commands, writes the three files (only without `.claude/workflow.json`) | setup |
+| `workflow:spec` | Writes `spec.md` from your answers (projects only) | spec |
+| `workflow:design` | Researches, proposes the options, writes `design.md` and the ADRs | design |
+| `workflow:slice` | Writes `slices.md` | slice |
+| `workflow:build` | Builds one slice | build |
+| `workflow:review` | Reviews the branch, read-only (`Read`, `Grep`, `Glob`, `Bash`), with the prompt of `agents/reviewer.md` | inspect |
+
+An agent gets only its "Agent" section and the shared worker rules, which end with its report format: what it did, the files, the checks, and its open questions. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff`, `mcp__workflow__unlock` or `AskUserQuestion`: in the spec and design phases the conversation asks you the questions and the agents research, draft and return what they could not settle. The intake and the retro have no agent and run in the conversation.
 
 ## A slice, step by step
 
-The conversation spawns the `workflow:build` agent for the slice and relays its report; the agent does steps 1 to 6. The mod registers that agent whenever the workflow on the current branch is in its build phase (at session start, after a phase is approved, after `/workflow continue` and after a verified slice), with the slice, its design sections and the checks in its prompt. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff` or `AskUserQuestion`: it reports what needs you, and the conversation asks. The test lock and the write scope hold for its tool calls as they do for the conversation's.
+The conversation spawns the `workflow:build` agent for the slice and relays its report; the agent does steps 1 to 6. The conversation's prompt names the slice and the agent; the agent's holds the slice, its design sections and the checks. It reports what needs you, a test it believes wrong included, and the conversation asks. The test lock and the write scope hold for its tool calls as they do for the conversation's.
 
 1. Contract: types, schemas, stubs that throw.
 2. Tests for every acceptance criterion.
 3. Red: Claude asks the mod to lock; the mod answers with the exact command to run, and locks only after it saw that command fail on the current code.
 4. Green: the tests are frozen. Claude implements, then runs the slice tests, lint, typecheck and the full suite exactly as the mod listed them.
 5. The real thing: the app, the route, the screen.
-6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice, commits if you said so, and reports verify's answer, whose last part tells the conversation what comes next.
-7. The conversation writes the handoff and goes on: it spawns `workflow:build` again for the next slice, or stops when you said so, or, after the last slice, starts the inspect phase, whose prompt verify's answer carries.
+6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice, commits if you said so, and finishes its report.
+7. When the agent's run ends, the mod hands over: it asks you whether to go on (unless `auto_next` is on), then sends the conversation the next step in a message of its own: spawn `workflow:build` for the next slice, or write the handoff and stop, or, after the last slice, the inspect phase.
 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
 
-**`auto_next`**: with `auto_next: yes` in the state file, verify tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
+**`auto_next`**: with `auto_next: yes` in the state file, the mod tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here; stopping pauses the workflow. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
 
 ## Several workflows at once
 
@@ -96,4 +112,4 @@ Each workflow has a model plan, the `models` line of its state file: one model a
 | build | opus | medium |
 | review | opus | high |
 
-The models are `haiku`, `sonnet` and `opus`, the efforts `low`, `medium`, `high` and `xhigh`. An entry naming anything else (Fable, `max`, a typo) reads as that step's default. Today only the build runs in an agent, `workflow:build`, on the plan's build model and effort; the other phases run in the conversation, on its model: Opus at high effort for spec, design, slice and inspect, xhigh only for a hard design call.
+The models are `haiku`, `sonnet` and `opus`, the efforts `low`, `medium`, `high` and `xhigh`. An entry naming anything else (Fable, `max`, a typo) reads as that step's default. Each step's agent runs on its plan model and effort, named in the conversation's prompt; the intake and the retro run in the conversation, on its model.

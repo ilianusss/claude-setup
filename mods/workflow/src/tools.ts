@@ -2,8 +2,8 @@ import type { EngineInterface, On, RegisteredToolSpec } from 'claude-code'
 
 import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
-import { lockSlice, unlockFile, verifySlice } from './build'
-import { day, iso } from './clock'
+import { lockSlice, nextStep, unlockFile, verifiedForAgent, verifiedForConversation, verifySlice } from './build'
+import { day, iso, submitLater } from './clock'
 import { loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { GATE } from './labels'
@@ -145,7 +145,8 @@ async function advance($: EngineInterface, context: Context, summary: string, no
     return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
   }
 
-  const moved: Workflow = { ...workflow, phase: target, slice, status: target === 'done' ? 'done' : workflow.status, updated: iso(now) }
+  const status = target === 'done' ? 'done' : answer === GATE.stop ? 'paused' : workflow.status
+  const moved: Workflow = { ...workflow, phase: target, slice, status, updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, withLog(moved, day(now), `${workflow.phase} approved`))
   await refreshStatus($)
   await registerAgents($)
@@ -195,13 +196,31 @@ async function lockTool($: EngineInterface): Promise<ToolAnswer> {
   }
 }
 
-async function verifyTool($: EngineInterface): Promise<ToolAnswer> {
+async function verifyTool($: EngineInterface, runtime: Runtime, agentId: string | undefined): Promise<ToolAnswer> {
   try {
-    const verified = await verifySlice($, await contextOf($), await $.clock.now())
+    const context = await contextOf($)
+    const verified = await verifySlice($, context, await $.clock.now())
     await registerAgents($)
-    return await answered($, verified)
+    if (agentId === undefined) return await answered($, await verifiedForConversation($, context, verified))
+    runtime.handovers.set(agentId, verified.advanced.slug)
+    return await answered($, verifiedForAgent(verified))
   } catch (error) {
     return failure(error)
+  }
+}
+
+async function handOver($: EngineInterface, runtime: Runtime, agentId: string): Promise<void> {
+  const slug = runtime.handovers.get(agentId)
+  if (slug === undefined) return
+  runtime.handovers.delete(agentId)
+  try {
+    const context = await contextOf($)
+    const workflow = context.workflows.find(candidate => candidate.slug === slug)
+    if (workflow === undefined) return
+    submitLater($, `The \`workflow:build\` agent's run has ended after a verified slice of \`${slug}\`. Next:\n\n${await nextStep($, context, workflow)}`)
+    await refreshStatus($)
+  } catch (error) {
+    $.ui.log(`workflow: the next step after workflow:build could not be handed over: ${describe(error)}`, { to: 'debug' })
   }
 }
 
@@ -219,10 +238,12 @@ function inputOf(e: unknown): Record<string, unknown> {
 }
 
 function refusedInStepAgent(tool: string): ToolAnswer {
-  return { deny: `workflow: ${tool} is refused in a step agent: only the conversation moves the workflow and hands it off. Put what it needs in your report.` }
+  return {
+    deny: `workflow: ${tool} is refused in a step agent: only the conversation moves the workflow, hands it off and asks the user. Put what it needs in your report.`,
+  }
 }
 
-export function registerToolHandlers(on: On): void {
+export function registerToolHandlers(on: On, runtime: Runtime): void {
   on('tool.call', { tool: 'mcp__workflow__handoff' }, ($, e) =>
     e.agentId === undefined ? handoffTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
@@ -230,6 +251,13 @@ export function registerToolHandlers(on: On): void {
     e.agentId === undefined ? advanceTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
   on('tool.call', { tool: 'mcp__workflow__lock' }, $ => lockTool($))
-  on('tool.call', { tool: 'mcp__workflow__verify' }, $ => verifyTool($))
-  on('tool.call', { tool: 'mcp__workflow__unlock' }, ($, e) => unlockTool($, inputOf(e)))
+  on('tool.call', { tool: 'mcp__workflow__verify' }, ($, e) => verifyTool($, runtime, e.agentId))
+  on('tool.call', { tool: 'mcp__workflow__unlock' }, ($, e) =>
+    e.agentId === undefined ? unlockTool($, inputOf(e)) : refusedInStepAgent(e.tool),
+  )
+  on('turn.complete', async ($, e, next) => {
+    const ended = await next(e)
+    if (e.agentId !== undefined) await handOver($, runtime, e.agentId)
+    return ended
+  })
 }

@@ -6,7 +6,7 @@ import { GATE, SWITCH } from '../src/labels'
 import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
-const WITHHELD = ['mcp__workflow__advance', 'mcp__workflow__handoff', 'AskUserQuestion']
+const WITHHELD = ['mcp__workflow__advance', 'mcp__workflow__handoff', 'mcp__workflow__unlock', 'AskUserQuestion']
 const TEST_FILE = `${ROOT}/src/cart.test.ts`
 const RED = 'pnpm vitest run src/cart.test.ts'
 const CHECKS = [RED, 'pnpm lint', 'pnpm tsc --noEmit', 'pnpm test']
@@ -89,12 +89,12 @@ describe('registering workflow:build', () => {
     expect(prompt).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
   })
 
-  test('a workflow in another phase registers no agent', async ($, on) => {
+  test('a workflow in another phase registers it too, with the other agents of its size', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'design', slice: '0' }) }), 'feat/login')
 
     await start($)
 
-    expect(fake.agents).toHaveLength(0)
+    expect(fake.agents.map(agent => agent.name)).toContain('build')
   })
 
   test('a workflow on another branch registers no agent', async ($, on) => {

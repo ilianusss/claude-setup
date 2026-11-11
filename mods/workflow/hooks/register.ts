@@ -12,7 +12,7 @@ export const register: Register = on => {
   const runtime = newRuntime()
 
   registerCommands(on, runtime)
-  registerToolHandlers(on)
+  registerToolHandlers(on, runtime)
   registerGuards(on)
 
   on('session.start', async ($, e, next) => {

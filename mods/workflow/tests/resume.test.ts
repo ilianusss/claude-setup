@@ -19,19 +19,19 @@ describe('/workflow continue', () => {
     expect(ran.text).toContain('login')
     expect(fake.prompts[0]).toContain('The build phase')
     expect(fake.prompts[0]).toContain('Slice 1: Walking skeleton')
-    expect(fake.prompts[0]).toContain('Form and route.')
     expect(fake.prompts[0]).toContain('Write slice 1 tests.')
   })
 
-  test('a build step names the slice test command and the checks verify waits for', async ($, on) => {
+  test('a build step leaves the design sections and the checks to the build agent', async ($, on) => {
     const fake = fakeEngine(on, buildRepo(), 'feat/login')
     await start($)
 
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(fake.prompts[0]).toContain('`pnpm vitest run {files}`')
-    expect(fake.prompts[0]).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
+    expect(fake.prompts[0]).not.toContain('Form and route.')
+    expect(fake.prompts[0]).not.toContain('`pnpm vitest run {files}`')
+    expect(fake.prompts[0]).not.toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
   })
 
   test('offers to switch to the workflow branch', async ($, on) => {

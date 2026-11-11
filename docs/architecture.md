@@ -86,9 +86,10 @@ All four are TypeScript modules for the Claude Code mod API (early access: it ma
 - five tools for Claude (`handoff`, `advance`, `lock`, `verify`, `unlock`), registered only in repos with a workflow;
 - the test lock: a slice's tests are locked once the mod saw the exact test command fail on the current code, and the slice closes once it saw every check pass on the current code. The mod never runs project code: it watches the commands Claude runs through Bash;
 - guards: locked tests refused to Edit and restored after a shell change, each phase limited to the files it may write;
-- prompts composed per step: the phase file, the state, and for a build the slice with the design sections it names;
+- prompts composed per step: for the conversation, the phase file without its agent sections, the agent to spawn with its model and effort, and the state; for the build agent, the slice with the design sections it names and the checks;
 - the model plan: one model and effort per step in the state file, the default plan when it is missing, and the step's default for any entry naming Fable, `max` or an unknown value;
-- the `workflow:build` agent, registered with `$.agent.register` while the workflow on the current branch is in its build phase, on the plan's build model and effort, with the `## Agent` section of `phases/build.md`, the slice and the checks as its prompt, and `advance`, `handoff` and `AskUserQuestion` withheld. The conversation keeps the `## With the user` section: it spawns the agent and relays its report.
+- one agent per step of the workflow's size (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, `review`), registered with `$.agent.register` for the workflow on the current branch, each on its plan model and effort, with the `## Agent` section of its phase file (the map's is the `## Map agent` section of `phases/design.md`) and the shared worker rules as its prompt, and `advance`, `handoff`, `unlock` and `AskUserQuestion` withheld. `workflow:review` is limited to `Read`, `Grep`, `Glob` and `Bash`, and its prompt starts with `agents/reviewer.md`, found two folders above the mod, or a short built-in reviewer prompt when that file is missing. The conversation keeps the `## With the user` section: it asks the questions, spawns the agent and relays its report;
+- the hand-over after a slice: `mcp__workflow__verify` called from an agent records that agent and answers it "finish your report"; when that agent's `turn.complete` arrives, the mod asks the next-slice dialog in the conversation's context (unless `auto_next`) and submits the next step to the conversation, which reads it once idle.
 
 **scribe** fixes each prompt before Claude reads it:
 
@@ -112,8 +113,7 @@ The phase files, guides and templates are markdown inside the workflow mod. If t
 
 What costs on a subscription: every turn resends the whole context; every agent is a cold start; verbose command output (reduced by `rtk`); high effort. Hence:
 
-- no agents inside the slice cycle, one reviewer per feature;
-- one `workflow:build` agent run per slice, so each slice starts from a fresh context while the conversation chains the slices without clearing;
+- one agent run per step, and one `workflow:build` run per slice, so each slice starts from a fresh context while the conversation chains the slices without clearing; the agents' prompts name the exact documents to read, to keep each cold start short;
 - the mod's bookkeeping and status line cost nothing;
 - nothing workflow-related is loaded in a repo without a workflow;
 - spec, design, slice and inspect are reasoning-heavy (Opus, high effort); the build is well specified by then (Sonnet, or Opus at medium effort);
