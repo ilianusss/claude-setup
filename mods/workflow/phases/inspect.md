@@ -17,8 +17,8 @@ The mod follows this phase's steps itself and shows them above the prompt: do no
 3. **Out of rounds.** If a blocker or a major is left after 3 rounds, stop and ask the user how to go on (AskUserQuestion), with the findings left and the evidence: fix them by hand (wait for the user, then review once more), accept them as known issues for the pull request body, or go back to the design (call `mcp__workflow__handoff` with the findings and stop: the design needs the user's decision before more code). Recommend the option the findings point to.
 4. **Choose the minors.** Once no blocker or major is left, ask which minor findings to fix in one AskUserQuestion with `multiSelect`, one option per finding (group related ones when there are more than four). Spawn `workflow:build` to fix the picked ones the same way. The others go in the pull request body as known issues. Skip this step when there is no minor finding.
 5. **Run every check** of the project, exactly as written.
-6. **Draft the pull request** with `following-git-conventions` (title, What, Test, and Known issues when any). Do not push: show the draft and ask.
-7. **Approval.** When the user approves the push and the pull request, call `mcp__workflow__advance`. A feature is then done; a project goes on to the retro.
+6. **Draft the pull request** with `following-git-conventions` (title, What, Test, and Known issues when any). Do not push yet: show the draft and ask the user, with AskUserQuestion, whether to push the branch and open the pull request.
+7. **Push, then approve.** Once the user agrees, push the branch (`git push -u origin <branch>`) and open the pull request with the draft (`gh pr create`), and only then call `mcp__workflow__advance`: the mod offers to remove the worktree only when the branch is pushed. A feature is then done; a project goes on to the retro.
 
 An existing test changes only with a reason the user agrees with, listed in your report.
 
