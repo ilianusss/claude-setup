@@ -98,27 +98,37 @@ describe('gates', () => {
     expect(text(ran)).not.toContain('/workflow next')
   })
 
-  test('Continue returns the next phase prompt to go straight on with', async ($, on) => {
+  test('Continue registers the agents, ends the turn and submits the next phase prompt in a turn of its own', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
     fake.answers.push(GATE.approve)
     await start($)
+    const registeredBefore = fake.agents.length
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    const registeredByTheGate = fake.agents.length - registeredBefore
+    const submittedDuringTheCall = fake.prompts.length
+    await fake.clock.settle()
 
-    expect(text(ran)).toContain('The slice phase')
-    expect(text(ran)).toContain('Do the slice work.')
-    expect(fake.prompts).toHaveLength(0)
+    expect(registeredByTheGate).toBeGreaterThan(0)
+    expect(submittedDuringTheCall).toBe(0)
+    expect(text(ran)).toContain('End your turn')
+    expect(text(ran)).not.toContain('Do the slice work.')
+    expect(fake.prompts).toHaveLength(1)
+    expect(fake.prompts[0]).toContain('The slice phase')
+    expect(fake.prompts[0]).toContain('Do the slice work.')
   })
 
-  test('Continue into build returns the build prompt for the first slice not done', async ($, on) => {
+  test('Continue into build submits the build prompt for the first slice not done', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'slice', slice: '0' }) }), 'feat/login')
     fake.answers.push(GATE.approve)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two slices.' })
+    await fake.clock.settle()
 
-    expect(text(ran)).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 1/))
-    expect(text(ran)).toContain('Slice 1: Walking skeleton')
+    expect(text(ran)).not.toContain('Spawn `workflow:build`')
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 1/))
+    expect(fake.prompts[0]).toContain('Slice 1: Walking skeleton')
   })
 
   test('Continue out of the last phase closes the workflow', async ($, on) => {

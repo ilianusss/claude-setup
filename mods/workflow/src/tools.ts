@@ -11,7 +11,7 @@ import { readPhase, stepsOf } from './phases'
 import { chooseModels, rememberRecommendations, savePlan } from './picker'
 import { DEFAULT_PLAN, EFFORTS, MODELS as MODEL_NAMES, STEPS, parseRecommendations, withRecommendations } from './plan'
 import type { ModelPlan, Recommendation } from './plan'
-import { phasePrompt, stopPrompt } from './prompts'
+import { NEXT_IN_ITS_OWN_TURN, phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { finish, offerEnding, rememberEnteredWorktree } from './ending'
 import { endReviewRound } from './review'
@@ -246,8 +246,9 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
     if (ending.kind === 'leave') return `${closed}\n\n${ending.prompt}`
     return ending.text === '' ? closed : `${closed} ${ending.text}`
   }
-  if (answer === GATE.stop) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
-  return `Approved: "${workflow.slug}" is now in its ${target} phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`
+  if (isStopping) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
+  submitLater($, `The ${target} phase of "${workflow.slug}" starts now. Go on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`)
+  return `Approved: "${workflow.slug}" is now in its ${target} phase. ${NEXT_IN_ITS_OWN_TURN} End your turn now, with a Next: line saying the ${target} phase starts right away.`
 }
 
 async function progress($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
@@ -349,7 +350,7 @@ async function handOver($: EngineInterface, runtime: Runtime, agentId: string): 
     const context = await contextOf($)
     const workflow = context.workflows.find(candidate => candidate.slug === slug)
     if (workflow === undefined) return
-    submitLater($, `The \`workflow:build\` agent's run has ended after a verified slice of \`${slug}\`. Next:\n\n${await nextStep($, context, workflow)}`)
+    submitLater($, `The \`workflow:build\` agent's run has ended after a verified slice of \`${slug}\`. Next:\n\n${(await nextStep($, context, workflow)).text}`)
     await refreshStatus($)
   } catch (error) {
     $.ui.log(`workflow: the next step after workflow:build could not be handed over: ${describe(error)}`, { to: 'debug' })

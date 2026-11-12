@@ -11,6 +11,11 @@ import { sections } from './slices'
 import { MAX_REVIEW_ROUNDS, reviewRoundOf } from './state'
 import type { Workflow } from './state'
 
+// $.agent.register defines an agent type the Agent tool dispatches from the next turn on, so a step agent registered
+// again in this turn would run its old definition (the old slice, the old model) if spawned before the turn ends.
+export const NEXT_IN_ITS_OWN_TURN =
+  'The step agents were registered again in this turn, and the Agent tool spawns them as registered only from the next turn on: the mod sends you what comes next in a message of its own.'
+
 function bulletOr(items: readonly string[], none: string): string {
   return items.length > 0 ? items.join('; ') : none
 }

@@ -1,6 +1,6 @@
 import type { EngineInterface, On, PromptOrigin } from 'claude-code'
 
-import { registerAgents } from './agents'
+import { registerAgents, registerAgentsFor } from './agents'
 import { ask, askOrUndefined } from './ask'
 import { unlockFile } from './build'
 import { clearThenSubmit, day, iso, submitLater } from './clock'
@@ -134,13 +134,14 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   await saveWorkflow($, context.repo, context.paths, workflow)
   await registerToolsOnce($, runtime)
   announcePhase($, workflow)
+  const fresh = (await loadContext($)) ?? context
+  await registerAgentsFor($, fresh, workflow)
   if (!where.here) {
-    submitLater($, enterWorktreePrompt(workflow, await phasePrompt($, context, workflow)))
+    submitLater($, enterWorktreePrompt(workflow, await phasePrompt($, fresh, workflow)))
     return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Claude is moving the session there to start the intake.`
   }
-  const fresh = await loadContext($)
   await refreshStatus($, fresh)
-  submitLater($, await phasePrompt($, fresh ?? context, workflow))
+  submitLater($, await phasePrompt($, fresh, workflow))
   return `started "${slug}" (${size}) on ${where.branch}, phase ${phase}.`
 }
 

@@ -120,6 +120,38 @@ describe('/workflow new', () => {
     expect(prompt.indexOf('EnterWorktree')).toBeLessThan(prompt.indexOf('The intake phase'))
   })
 
+  test('in the main checkout, registers the step agents of the new workflow before the intake prompt is submitted', async ($, on) => {
+    const fake = fakeEngine(on, WITH_CONFIG)
+    fake.answers.push(SIZE.feature, COMMITS.yes, CHAINING.no)
+    await start($)
+
+    await run($, 'new Add login')
+    const registered = fake.agents.map(spec => spec.name).sort()
+    const submittedDuringTheCommand = fake.prompts.length
+    await fake.clock.settle()
+
+    expect(registered).toEqual(['build', 'design', 'map', 'review', 'slice'])
+    expect(fake.agents.every(spec => spec.prompt.includes('`add-login`'))).toBe(true)
+    expect(submittedDuringTheCommand).toBe(0)
+    expect(fake.prompts).toHaveLength(1)
+  })
+
+  test('in a free linked worktree, registers the step agents of the new workflow before the intake prompt is submitted', async ($, on) => {
+    const fake = fakeEngine(on, WITH_CONFIG)
+    fake.isLinked = true
+    fake.answers.push(SIZE.project, COMMITS.yes, CHAINING.no, BRANCH.create('feat/add-login'))
+    await start($)
+
+    await run($, 'new Add login')
+    const registered = fake.agents.map(spec => spec.name).sort()
+    const submittedDuringTheCommand = fake.prompts.length
+    await fake.clock.settle()
+
+    expect(registered).toEqual(['build', 'design', 'review', 'slice', 'spec'])
+    expect(submittedDuringTheCommand).toBe(0)
+    expect(fake.prompts).toHaveLength(1)
+  })
+
   test('the worktree prompt tells Claude to send the user to /workflow continue when it cannot enter', async ($, on) => {
     const fake = fakeEngine(on, WITH_CONFIG)
     fake.answers.push(SIZE.feature, COMMITS.yes, CHAINING.no)

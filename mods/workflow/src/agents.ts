@@ -69,14 +69,24 @@ async function registerStep($: EngineInterface, context: Context, workflow: Work
   }
 }
 
+// An agent type registered in a turn is spawned from the next turn on: whoever registers them hands the work that
+// spawns them to a turn of its own.
+export async function registerAgentsFor($: EngineInterface, context: Context, workflow: Workflow): Promise<void> {
+  try {
+    for (const step of inRegistrationOrder(stepsOf(workflow, context.config === undefined))) {
+      await registerStep($, context, workflow, step)
+    }
+  } catch (error) {
+    $.ui.log(`workflow: the step agents could not be registered: ${describe(error)}`, { to: 'debug' })
+  }
+}
+
 export async function registerAgents($: EngineInterface, given?: Context): Promise<void> {
   try {
     const context = given ?? (await loadContext($))
     const workflow = context?.current
     if (context === undefined || workflow === undefined) return
-    for (const step of inRegistrationOrder(stepsOf(workflow, context.config === undefined))) {
-      await registerStep($, context, workflow, step)
-    }
+    await registerAgentsFor($, context, workflow)
   } catch (error) {
     $.ui.log(`workflow: the step agents could not be registered: ${describe(error)}`, { to: 'debug' })
   }

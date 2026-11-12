@@ -115,7 +115,9 @@ describe('the model question at the intake gate', () => {
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(true)
     expect(agent(fake, 'build')).toMatchObject({ model: 'opus', effort: 'medium' })
-    expect(text(ran)).toContain('Do the design work.')
+    await fake.clock.settle()
+    expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.prompts[0]).toContain('Do the design work.')
   })
 
   test("Use Claude's recommendations saves them over the defaults, logs it and registers the agents on them", async ($, on) => {
@@ -129,7 +131,9 @@ describe('the model question at the intake gate', () => {
     expect(hasModelsLog(fake)).toBe(true)
     expect(agent(fake, 'build')).toMatchObject({ model: 'sonnet', effort: 'high' })
     expect(agent(fake, 'review')).toMatchObject({ model: 'opus', effort: 'xhigh' })
-    expect(text(ran)).toContain('Do the design work.')
+    await fake.clock.settle()
+    expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.prompts[0]).toContain('Do the design work.')
   })
 
   test('a dismissed model question keeps the plan and goes on with the next phase', async ($, on) => {
@@ -141,7 +145,9 @@ describe('the model question at the intake gate', () => {
 
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(false)
-    expect(text(ran)).toContain('Do the design work.')
+    await fake.clock.settle()
+    expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.prompts[0]).toContain('Do the design work.')
   })
 
   test('Not yet keeps the phase and the plan', async ($, on) => {
@@ -260,7 +266,9 @@ describe('the choice per step when the panel cannot be shown', () => {
     expect(state(fake).models).toEqual({ ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' }, review: { model: 'opus', effort: 'xhigh' } })
     expect(hasModelsLog(fake)).toBe(true)
     expect(agent(fake, 'review')).toMatchObject({ model: 'opus', effort: 'xhigh' })
-    expect(text(ran)).toContain('Do the design work.')
+    await fake.clock.settle()
+    expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.prompts[0]).toContain('Do the design work.')
   })
 
   test('takes a model and effort typed under Other', async ($, on) => {
@@ -297,7 +305,9 @@ describe('the choice per step when the panel cannot be shown', () => {
 
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(false)
-    expect(text(ran)).toContain('Do the design work.')
+    await fake.clock.settle()
+    expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.prompts[0]).toContain('Do the design work.')
   })
 })
 

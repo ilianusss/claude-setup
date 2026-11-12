@@ -2,7 +2,7 @@ import type { EngineInterface, ToolCallResult } from 'claude-code'
 
 import { askOrUndefined } from './ask'
 import { checksFor, isWatched, testFilesCommands } from './checks'
-import { day, iso } from './clock'
+import { day, iso, submitLater } from './clock'
 import type { Config } from './config'
 import { readSlices, specsFolder } from './context'
 import type { Context } from './context'
@@ -11,7 +11,7 @@ import { sha256 } from './hash'
 import { NEXT_SLICE, UNLOCK } from './labels'
 import { latestRun, removedLines } from './lock'
 import type { Lock, LockedFile } from './lock'
-import { phasePrompt, spawnBuild, stopPrompt } from './prompts'
+import { NEXT_IN_ITS_OWN_TURN, phasePrompt, spawnBuild, stopPrompt } from './prompts'
 import { refuse } from './refusal'
 import { changedFiles, relativeTo, treeHash } from './repo'
 import { addRun, readLock, readRuns, saveLock, saveWorkflow } from './store'
@@ -213,6 +213,8 @@ export async function verifySlice(
 }
 
 export async function verifiedForConversation($: EngineInterface, context: Context, verified: Verified): Promise<string> {
+  const next = await nextStep($, context, verified.advanced)
+  if (next.kind === 'go') submitLater($, `Slice ${verified.slice} of \`${verified.advanced.slug}\` is verified. Next:\n\n${next.text}`)
   return [
     `Slice ${verified.slice} verified.`,
     '',
@@ -220,7 +222,7 @@ export async function verifiedForConversation($: EngineInterface, context: Conte
     '',
     '## Next',
     '',
-    await nextStep($, context, verified.advanced),
+    next.kind === 'go' ? `Do the steps above. End your turn once they are done: ${NEXT_IN_ITS_OWN_TURN}` : next.text,
   ].join('\n')
 }
 
@@ -240,22 +242,27 @@ async function withStatus($: EngineInterface, context: Context, workflow: Workfl
   await saveWorkflow($, context.repo, context.paths, withLog({ ...workflow, status, updated: iso(now) }, day(now), status === 'active' ? 'resumed' : 'paused'))
 }
 
-export async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<string> {
+export type NextStep = { kind: 'go' | 'stop'; text: string }
+
+export async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<NextStep> {
   if (advanced.phase === 'inspect') {
     await withStatus($, context, advanced, 'active')
-    return `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`
+    return {
+      kind: 'go',
+      text: `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`,
+    }
   }
   if (advanced.autoNext) {
     await withStatus($, context, advanced, 'active')
-    return `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}`
+    return { kind: 'go', text: `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}` }
   }
   const answer = await askOrUndefined($, NEXT_SLICE.question(advanced.slug, advanced.slice - 1), [NEXT_SLICE.start(advanced.slice), NEXT_SLICE.stop], 'Next slice')
   if (answer === NEXT_SLICE.start(advanced.slice)) {
     await withStatus($, context, advanced, 'active')
-    return `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}`
+    return { kind: 'go', text: `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}` }
   }
   await withStatus($, context, advanced, 'paused')
-  return `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}`
+  return { kind: 'stop', text: `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}` }
 }
 
 export async function unlockFile(
