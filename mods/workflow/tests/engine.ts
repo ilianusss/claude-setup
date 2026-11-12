@@ -64,6 +64,7 @@ export type Fake = {
   files: Map<string, string>
   committed: Map<string, string>
   branch: string
+  toplevel: string
   isLinked: boolean
   behind: number
   gitLog: string
@@ -108,7 +109,7 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
   const line = args.join(' ')
   const ok = (stdout: string) => ({ exitCode: 0, stdout })
   if (line === 'rev-parse --path-format=absolute --show-toplevel --git-common-dir --git-dir') {
-    return ok(`${ROOT}\n${ROOT}/.git\n${fake.isLinked ? `${ROOT}/.git/worktrees/x` : `${ROOT}/.git`}\n`)
+    return ok(`${fake.toplevel}\n${ROOT}/.git\n${fake.isLinked ? `${ROOT}/.git/worktrees/x` : `${ROOT}/.git`}\n`)
   }
   if (line === 'symbolic-ref --quiet --short HEAD') return ok(`${fake.branch}\n`)
   if (line === 'add -A') return ok('')
@@ -180,6 +181,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     files: new Map(Object.entries(files)),
     committed: new Map(),
     branch,
+    toplevel: ROOT,
     isLinked: false,
     behind: 0,
     gitLog: '',

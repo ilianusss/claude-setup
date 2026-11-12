@@ -40,6 +40,12 @@ function fakeIn(on: On, files: Record<string, string>, branch: string, cwd: stri
   return { fake: fakeEngine(following, files, branch), where }
 }
 
+function inLinkedWorktree(on: On, files: Record<string, string>, branch: string, toplevel: string, cwd = toplevel): void {
+  const { fake } = fakeIn(on, files, branch, cwd)
+  fake.toplevel = toplevel
+  fake.isLinked = true
+}
+
 function pushed(fake: Fake): void {
   fake.unpushed = ''
   fake.refs.set(BRANCH, 'c1')
@@ -478,7 +484,7 @@ describe('checking again at removal time (AC5)', () => {
 
 describe('ExitWorktree with action remove', () => {
   test("is refused inside an open workflow's worktree, naming /workflow done and mcp__workflow__finish", async ($, on) => {
-    fakeIn(on, repo(), BRANCH, WORKTREE)
+    inLinkedWorktree(on, repo(), BRANCH, WORKTREE)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
@@ -488,7 +494,7 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test("is refused inside a done workflow's worktree, even with discard_changes", async ($, on) => {
-    fakeIn(on, doneRepo(), BRANCH, WORKTREE)
+    inLinkedWorktree(on, doneRepo(), BRANCH, WORKTREE)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove', discard_changes: true })
@@ -497,7 +503,7 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test("is refused in a subfolder of a workflow's worktree", async ($, on) => {
-    fakeIn(on, repo(), BRANCH, `${WORKTREE}/src`)
+    inLinkedWorktree(on, repo(), BRANCH, WORKTREE, `${WORKTREE}/src`)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
@@ -506,7 +512,7 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test('is refused from a step agent too', async ($, on) => {
-    fakeIn(on, repo(), BRANCH, WORKTREE)
+    inLinkedWorktree(on, repo(), BRANCH, WORKTREE)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove', agentId: 'a1' })
@@ -515,7 +521,7 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test("with action keep is allowed inside a workflow's worktree", async ($, on) => {
-    fakeIn(on, repo(), BRANCH, WORKTREE)
+    inLinkedWorktree(on, repo(), BRANCH, WORKTREE)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'keep' })
@@ -524,7 +530,7 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test("is allowed outside any workflow's worktree", async ($, on) => {
-    fakeIn(on, repo(), BRANCH, `${ROOT}-scratch`)
+    inLinkedWorktree(on, repo(), 'scratch', `${ROOT}-scratch`)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
@@ -533,7 +539,25 @@ describe('ExitWorktree with action remove', () => {
   })
 
   test('is allowed in the worktree of an abandoned workflow', async ($, on) => {
-    fakeIn(on, repo({ status: 'abandoned' }), BRANCH, WORKTREE)
+    inLinkedWorktree(on, repo({ status: 'abandoned' }), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+
+  test('is allowed in a session worktree inside the main checkout an adopted workflow saved as its worktree', async ($, on) => {
+    inLinkedWorktree(on, repo({ worktree: ROOT }), 'worktree-x', `${ROOT}/.claude/worktrees/x`)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+
+  test('is allowed in the main checkout an adopted workflow saved as its worktree', async ($, on) => {
+    fakeIn(on, repo({ worktree: ROOT }), BRANCH, ROOT)
     await start($)
 
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })

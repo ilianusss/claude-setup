@@ -79,12 +79,14 @@ async function scopeNotes($: EngineInterface, watch: ScopeWatch): Promise<string
 }
 
 // ExitWorktree's remove deletes the worktree and its branch with none of the ending's checks (clean, pushed, the
-// user's yes in the mod's dialog), so the only removal of a workflow's worktree is the ending's.
+// user's yes in the mod's dialog), so the only removal of a workflow's worktree is the ending's. The main checkout is
+// never one: ExitWorktree cannot remove it, and an adopted workflow saves it as its worktree, so matching it would
+// refuse every session worktree EnterWorktree creates inside it.
 async function removalRefusal($: EngineInterface): Promise<string | undefined> {
   const context = await loadContext($)
-  if (context === undefined) return undefined
-  const cwd = await $.session.cwd()
-  const held = context.workflows.find(workflow => workflow.status !== 'abandoned' && relativeTo(workflow.worktree, cwd) !== undefined)
+  if (context === undefined || !context.repo.isLinked) return undefined
+  const { root } = context.repo
+  const held = context.workflows.find(workflow => workflow.status !== 'abandoned' && workflow.worktree === root)
   if (held === undefined) return undefined
   return `workflow: ExitWorktree with action "remove" would delete the worktree of the workflow "${held.slug}" without checking that it is clean and pushed, or asking the user. Leave it with action "keep": \`/workflow done ${held.slug}\` offers to remove it once it is clean and pushed, and after the user's yes mcp__workflow__finish removes it.`
 }
