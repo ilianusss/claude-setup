@@ -5,6 +5,7 @@ import { pipelineOf, readDoc, readSlices, specsFolder } from './context'
 import type { Context } from './context'
 import { PRODUCES } from './labels'
 import { STEP_SOURCES, readPhase, stepOf, stepsOf } from './phases'
+import type { PhaseDoc } from './phases'
 import { DEFAULT_PLAN, describeChoice } from './plan'
 import type { Step } from './plan'
 import { sections } from './slices'
@@ -185,6 +186,16 @@ function defaultModels(context: Context, workflow: Workflow): string {
   ].join('\n')
 }
 
+function resumeAt(doc: PhaseDoc, workflow: Workflow): string | undefined {
+  const name = workflow.step === undefined ? undefined : doc.steps[workflow.step - 1]
+  if (name === undefined) return undefined
+  return [
+    '## Where to resume',
+    '',
+    `The workflow stopped in this phase at step ${workflow.step} of ${doc.steps.length}: ${name}. Resume there: the steps before it are done, so check their results in this workflow's documents and the handoff below instead of doing them again, and call mcp__workflow__progress with ${workflow.step} as you start it.`,
+  ].join('\n')
+}
+
 function joined(parts: ReadonlyArray<string | undefined>): string {
   return parts.filter((part): part is string => part !== undefined && part.length > 0).join('\n\n')
 }
@@ -202,6 +213,7 @@ export async function phasePrompt(
     ...header(workflow),
     leading(context, workflow),
     drift,
+    resumeAt(doc, workflow),
     doc.body,
     workflow.phase === 'intake' ? defaultModels(context, workflow) : undefined,
     mapAgent(workflow),

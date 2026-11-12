@@ -61,6 +61,26 @@ describe('/workflow continue', () => {
     expect(fake.prompts[0]).toContain('drift-check.md')
   })
 
+  test('resumes at the saved sub-step of the phase and names it', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'intake', slice: '0', step: '2' }) }), 'feat/login')
+    await start($)
+
+    await run($, 'continue')
+    await fake.clock.settle()
+
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/step 2 of 4[^\n]*restate/i))
+  })
+
+  test('without a saved sub-step names no step to resume at', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'intake', slice: '0' }) }), 'feat/login')
+    await start($)
+
+    await run($, 'continue')
+    await fake.clock.settle()
+
+    expect(fake.prompts[0]).not.toEqual(expect.stringMatching(/step \d+ of 4/i))
+  })
+
   test('says when there is no workflow to continue', async ($, on) => {
     const fake = fakeEngine(on, { [`${ROOT}/README.md`]: '# x' })
     await start($)
