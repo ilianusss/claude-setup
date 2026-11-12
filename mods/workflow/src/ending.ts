@@ -6,7 +6,7 @@ import { day, iso } from './clock'
 import type { Context } from './context'
 import { ENDING } from './labels'
 import { refuse } from './refusal'
-import { git, isDefaultBranch, lines, relativeTo } from './repo'
+import { findRepo, git, isDefaultBranch, lines, relativeTo } from './repo'
 import type { Repo } from './repo'
 import type { Runtime } from './runtime'
 import { withLog } from './state'
@@ -23,6 +23,10 @@ const GIT_DIR_SUFFIX = '/.git'
 
 export async function rememberEnteredWorktree($: EngineInterface, path: string): Promise<void> {
   await update($, enteredWorktree, () => path)
+}
+
+export function enteredWorktreeOf($: EngineInterface): Promise<string | null> {
+  return read($, enteredWorktree)
 }
 
 function mainCheckout(repo: Repo): string | undefined {
@@ -63,12 +67,30 @@ async function ignoredEntries($: EngineInterface, worktree: string): Promise<str
   return [...new Set(entries)]
 }
 
+// The user agreed to delete the ignored entries the question named, and only those.
+async function unnamedIgnored($: EngineInterface, worktree: string, named: readonly string[]): Promise<string[]> {
+  const ignored = await ignoredEntries($, worktree)
+  if (ignored === undefined) return ['git could not list its ignored files']
+  const unnamed = ignored.filter(entry => !named.includes(entry))
+  return unnamed.length === 0 ? [] : [`ignored files the question did not name appeared since: ${unnamed.join(', ')}`]
+}
+
+// A path that reaches the worktree through a link, or a repository nested in it, is inside it: the session's place is
+// the top level git resolves for its folder, never the folder's path.
+async function sessionTopLevel($: EngineInterface): Promise<string | undefined> {
+  return (await findRepo($, await $.session.cwd()))?.root
+}
+
 function againLater(workflow: Workflow): string {
   return `\`/workflow done ${workflow.slug}\` offers to remove them again.`
 }
 
+const UNRESOLVED_SESSION = 'git could not resolve the repository of the session folder'
+
+// `refs/heads/` keeps a tag of the same name from standing in for the branch. `<branch>@{u}` reads the branch's own
+// upstream setting, and git refuses `refs/heads/<branch>@{u}`.
 async function deleteBranch($: EngineInterface, main: string, branch: string): Promise<string | undefined> {
-  const local = await git($, main, ['rev-parse', '--verify', '--quiet', branch])
+  const local = await git($, main, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
   const upstream = await git($, main, ['rev-parse', '--verify', '--quiet', `${branch}@{u}`])
   if (local.exitCode !== 0 || upstream.exitCode !== 0 || local.stdout.trim() !== upstream.stdout.trim()) {
     return "it does not point at its upstream's commit"
@@ -77,9 +99,17 @@ async function deleteBranch($: EngineInterface, main: string, branch: string): P
   return deleted.exitCode === 0 ? undefined : `git could not delete it: ${deleted.stderr.trim()}`
 }
 
-async function remove($: EngineInterface, context: Context, workflow: Workflow, main: string, now: number): Promise<string> {
+async function remove(
+  $: EngineInterface,
+  context: Context,
+  workflow: Workflow,
+  agreed: { main: string; named: readonly string[] },
+  now: number,
+): Promise<string> {
   const { worktree, branch } = workflow
+  const { main, named } = agreed
   const found = await problems($, workflow)
+  if (found.length === 0) found.push(...(await unnamedIgnored($, worktree, named)))
   if (found.length > 0) return `Removed nothing: ${found.join('; ')}. Once that is fixed, ${againLater(workflow)}`
   const removed = await git($, main, ['worktree', 'remove', worktree])
   if (removed.exitCode !== 0) {
@@ -107,37 +137,42 @@ function startedInside(workflow: Workflow, main: string): string {
 }
 
 export async function offerEnding($: EngineInterface, runtime: Runtime, context: Context, workflow: Workflow, now: number): Promise<Ending> {
-  const main = mainCheckout(context.repo)
-  if (workflow.worktree === main) return { kind: 'said', text: '' }
   const { worktree, branch } = workflow
-  const found = main === undefined ? [`the main checkout of this repo could not be found from ${context.repo.commonDir}`] : await problems($, workflow)
-  if (main === undefined || found.length > 0) {
-    return { kind: 'said', text: `Kept the worktree ${worktree} and the branch ${branch}: ${found.join('; ')}. Once that is fixed, ${againLater(workflow)}` }
-  }
+  const kept = (reason: string): Ending => ({
+    kind: 'said',
+    text: `Kept the worktree ${worktree} and the branch ${branch}: ${reason}. Once that is fixed, ${againLater(workflow)}`,
+  })
+  const main = mainCheckout(context.repo)
+  if (main === undefined) return kept(`the main checkout of this repo could not be found from ${context.repo.commonDir}`)
+  if (worktree === main) return { kind: 'said', text: '' }
+  const found = await problems($, workflow)
+  if (found.length > 0) return kept(found.join('; '))
   const ignored = await ignoredEntries($, worktree)
-  if (ignored === undefined) {
-    return { kind: 'said', text: `Kept the worktree ${worktree} and the branch ${branch}: git could not list its ignored files. ${againLater(workflow)}` }
-  }
+  if (ignored === undefined) return kept('git could not list its ignored files')
   const answer = await askOrUndefined($, ENDING.question(worktree, branch, ignored), [ENDING.remove, ENDING.keep], 'Worktree')
   if (answer !== ENDING.remove) return { kind: 'said', text: `Kept the worktree ${worktree} and the branch ${branch}. ${againLater(workflow)}` }
-  if (relativeTo(worktree, await $.session.cwd()) === undefined) return { kind: 'said', text: await remove($, context, workflow, main, now) }
+  const toplevel = await sessionTopLevel($)
+  if (toplevel === undefined) return kept(UNRESOLVED_SESSION)
+  if (relativeTo(worktree, toplevel) === undefined) return { kind: 'said', text: await remove($, context, workflow, { main, named: ignored }, now) }
   if ((await read($, enteredWorktree)) !== worktree) return { kind: 'said', text: startedInside(workflow, main) }
-  runtime.agreedRemoval = workflow.slug
+  runtime.agreedRemoval = { slug: workflow.slug, ignored }
   return { kind: 'leave', prompt: leavePrompt(workflow, main) }
 }
 
 export async function finish($: EngineInterface, runtime: Runtime, context: Context, now: number): Promise<string> {
-  const slug = runtime.agreedRemoval
-  if (slug === undefined) refuse('the user has not agreed to remove a worktree in this session: nothing was removed. `/workflow done <slug>` asks them.')
-  const workflow = context.workflows.find(candidate => candidate.slug === slug)
+  const agreed = runtime.agreedRemoval
+  if (agreed === undefined) refuse('the user has not agreed to remove a worktree in this session: nothing was removed. `/workflow done <slug>` asks them.')
+  const workflow = context.workflows.find(candidate => candidate.slug === agreed.slug)
   const main = mainCheckout(context.repo)
   if (workflow === undefined || workflow.status !== 'done' || main === undefined) {
     runtime.agreedRemoval = undefined
-    refuse(`"${slug}" is not a finished workflow of this repo: nothing was removed.`)
+    refuse(`"${agreed.slug}" is not a finished workflow of this repo: nothing was removed.`)
   }
-  if (relativeTo(workflow.worktree, await $.session.cwd()) !== undefined) {
+  const toplevel = await sessionTopLevel($)
+  if (toplevel === undefined) refuse(`${UNRESOLVED_SESSION}, so the mod cannot tell whether the session left the worktree ${workflow.worktree}. Nothing was removed.`)
+  if (relativeTo(workflow.worktree, toplevel) !== undefined) {
     refuse(`the session is still inside the worktree ${workflow.worktree}: call ExitWorktree with \`action\` set to "keep" first, then mcp__workflow__finish again. Nothing was removed.`)
   }
   runtime.agreedRemoval = undefined
-  return remove($, context, workflow, main, now)
+  return remove($, context, workflow, { main, named: agreed.ignored }, now)
 }

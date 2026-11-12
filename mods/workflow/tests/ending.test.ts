@@ -10,9 +10,30 @@ import type { Fake } from './engine'
 const WORKTREE = `${ROOT}-login`
 const BRANCH = 'feat/login'
 
-type Where = { cwd: string; ignored: string }
+// `toplevels` says where git puts a folder and what is below it: its top level, or null where git finds no repository.
+// A folder not listed resolves as the fake resolves every folder.
+type Where = { cwd: string; ignored: string; toplevels: Map<string, string | null> }
 
 const IGNORED_LISTING = 'git status --ignored --porcelain'
+const REPO_LOOKUP = 'git rev-parse --path-format=absolute --show-toplevel --git-common-dir --git-dir'
+
+function ran(exitCode: number, stdout: string) {
+  return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+}
+
+function toplevelOf(where: Where, cwd: string): string | null | undefined {
+  const folder = [...where.toplevels.keys()]
+    .filter(key => cwd === key || cwd.startsWith(`${key}/`))
+    .sort((a, b) => b.length - a.length)[0]
+  return folder === undefined ? undefined : where.toplevels.get(folder)
+}
+
+// A top level beside the main checkout is one of its linked worktrees; any other is a repository of its own.
+function repoLookup(toplevel: string): string {
+  if (toplevel === ROOT) return `${ROOT}\n${ROOT}/.git\n${ROOT}/.git\n`
+  if (toplevel.startsWith(`${ROOT}-`)) return `${toplevel}\n${ROOT}/.git\n${ROOT}/.git/worktrees/x\n`
+  return `${toplevel}\n${toplevel}/.git\n${toplevel}/.git\n`
+}
 
 function repo(fields: Partial<Record<string, string>> = {}): Record<string, string> {
   return buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'inspect', worktree: WORKTREE, ...fields }) })
@@ -22,19 +43,26 @@ function doneRepo(): Record<string, string> {
   return repo({ phase: 'done', status: 'done' })
 }
 
-// The kit answers session.cwd with the main checkout and has no listing of ignored files, and a second hook on either
-// event is refused: the fake's own registrations are swapped for ones that follow `where`, so a test can move the
-// session in and out of the worktree and fill the worktree's ignored entries.
+// The kit answers session.cwd with the main checkout, and the fake has no listing of ignored files and resolves every
+// folder to one top level; a second hook on either event is refused: the fake's own registrations are swapped for ones
+// that follow `where`, so a test can move the session in and out of the worktree, fill the worktree's ignored entries
+// and say where git puts a folder. The worktree resolves to itself, as git resolves it.
 function fakeIn(on: On, files: Record<string, string>, branch: string, cwd: string): { fake: Fake; where: Where } {
-  const where = { cwd, ignored: '' }
+  const where: Where = { cwd, ignored: '', toplevels: new Map([[WORKTREE, WORKTREE]]) }
   const register = on as unknown as (event: string, ...rest: unknown[]) => unknown
-  const listIgnored = (fakeRun: (...args: unknown[]) => unknown) => (_: unknown, e: { argv: readonly string[] }, ...rest: unknown[]) =>
-    e.argv.join(' ') === IGNORED_LISTING
-      ? { value: { exitCode: 0, stdout: where.ignored, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-      : fakeRun(_, e, ...rest)
+  const followWhere =
+    (fakeRun: (...args: unknown[]) => unknown) =>
+    (_: unknown, e: { argv: readonly string[]; init?: { cwd?: string } }, ...rest: unknown[]) => {
+      const line = e.argv.join(' ')
+      if (line === IGNORED_LISTING) return ran(0, where.ignored)
+      const toplevel = line === REPO_LOOKUP ? toplevelOf(where, e.init?.cwd ?? '') : undefined
+      if (toplevel === null) return ran(128, '')
+      if (toplevel !== undefined) return ran(0, repoLookup(toplevel))
+      return fakeRun(_, e, ...rest)
+    }
   const following = ((event: string, ...rest: unknown[]) => {
     if (event === 'session.cwd') return on('session.cwd', () => ({ value: where.cwd }))
-    if (event === 'process.run') return register('process.run', listIgnored(rest[0] as (...args: unknown[]) => unknown))
+    if (event === 'process.run') return register('process.run', followWhere(rest[0] as (...args: unknown[]) => unknown))
     return register(event, ...rest)
   }) as unknown as On
   return { fake: fakeEngine(following, files, branch), where }
@@ -46,9 +74,15 @@ function inLinkedWorktree(on: On, files: Record<string, string>, branch: string,
   fake.isLinked = true
 }
 
+// git resolves the short name to the branch while no tag shares it.
+function branchAt(fake: Fake, commit: string): void {
+  fake.refs.set(BRANCH, commit)
+  fake.refs.set(`refs/heads/${BRANCH}`, commit)
+}
+
 function pushed(fake: Fake): void {
   fake.unpushed = ''
-  fake.refs.set(BRANCH, 'c1')
+  branchAt(fake, 'c1')
   fake.refs.set(`${BRANCH}@{u}`, 'c1')
 }
 
@@ -317,7 +351,7 @@ describe('removing the worktree and the branch (AC3)', () => {
 
   test('finish keeps a branch that is behind its upstream', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.refs.set(BRANCH, 'c0')
+    branchAt(fake, 'c0')
     fake.answers.push(GATE.approve, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
@@ -457,7 +491,7 @@ describe('checking again at removal time (AC5)', () => {
     await approveLastGate($)
     leaveWorktree(fake, where)
     fake.unpushed = 'c2\n'
-    fake.refs.set(BRANCH, 'c2')
+    branchAt(fake, 'c2')
 
     const ran = text(await finish($))
 
@@ -478,6 +512,135 @@ describe('checking again at removal time (AC5)', () => {
     const ran = await run($, 'done login')
 
     expect(ran.text).toContain('uncommitted')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('an ignored entry that appeared between the dialog and finish removes nothing, and is named', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    where.ignored = '!! .env\n'
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    leaveWorktree(fake, where)
+    where.ignored = '!! .env\n!! secrets.txt\n'
+
+    const ran = text(await finish($))
+
+    expect(ran).toContain('secrets.txt')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('/workflow done: an ignored entry that appears while the dialog is open removes nothing', async ($, on) => {
+    on('tool.call', { tool: 'AskUserQuestion' }, (_, e, next) => {
+      where.ignored = '!! secrets.txt\n'
+      return next(e)
+    })
+    const { fake, where } = fakeIn(on, doneRepo(), 'main', ROOT)
+    pushed(fake)
+    fake.answers.push(ENDING.remove)
+    await start($)
+
+    const ran = await run($, 'done login')
+
+    expect(ran.text).toContain('secrets.txt')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('the ignored entries the dialog named do not stop the removal', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    where.ignored = '!! .env\n!! node_modules/\n'
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    leaveWorktree(fake, where)
+
+    await finish($)
+
+    expect(removals(fake)).toHaveLength(2)
+  })
+
+  test("finish keeps the branch when a tag of its name points at its upstream's commit and the branch does not", async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    leaveWorktree(fake, where)
+    fake.refs.set(BRANCH, 'c1')
+    fake.refs.set(`refs/heads/${BRANCH}`, 'c0')
+
+    const ran = text(await finish($))
+
+    expect(removals(fake)).toEqual([{ cwd: ROOT, line: `worktree remove ${WORKTREE}` }])
+    expect(ran).toContain(BRANCH)
+  })
+})
+
+describe('where the session is, as git resolves it', () => {
+  const LINK = '/links/login'
+
+  test('/workflow done from a folder git resolves to the worktree, under another path, asks Claude to leave it first', async ($, on) => {
+    const { fake, where } = await inWorktree($, on, doneRepo())
+    where.toplevels.set(LINK, WORKTREE)
+    where.cwd = LINK
+    fake.answers.push(ENDING.remove)
+
+    await run($, 'done login')
+    await fake.clock.settle()
+
+    expect(fake.prompts.at(-1)).toContain('ExitWorktree')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('finish from a folder git resolves to the worktree, under another path, is refused', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    where.toplevels.set(LINK, WORKTREE)
+    where.cwd = LINK
+
+    const ran = await finish($)
+
+    expect(ran.deny).toContain('ExitWorktree')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('finish from a repository nested in the worktree is refused', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    leaveWorktree(fake, where)
+    where.toplevels.set(`${WORKTREE}/vendor/lib`, `${WORKTREE}/vendor/lib`)
+    where.cwd = `${WORKTREE}/vendor/lib`
+
+    const ran = await finish($)
+
+    expect(ran.deny).toBeDefined()
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('/workflow done removes nothing when git cannot resolve the session folder once the user agreed', async ($, on) => {
+    on('tool.call', { tool: 'AskUserQuestion' }, (_, e, next) => {
+      where.toplevels.set(ROOT, null)
+      return next(e)
+    })
+    const { fake, where } = fakeIn(on, doneRepo(), 'main', ROOT)
+    pushed(fake)
+    fake.answers.push(ENDING.remove)
+    await start($)
+
+    const ran = await run($, 'done login')
+
+    expect(ran.text).toContain('/workflow done login')
+    expect(removals(fake)).toEqual([])
+  })
+
+  test('finish removes nothing when git cannot resolve the session folder', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    fake.answers.push(GATE.approve, ENDING.remove)
+    await approveLastGate($)
+    leaveWorktree(fake, where)
+    where.toplevels.set(ROOT, null)
+
+    const ran = await finish($)
+
+    expect(ran.deny).toBeDefined()
     expect(removals(fake)).toEqual([])
   })
 })
@@ -563,5 +726,53 @@ describe('ExitWorktree with action remove', () => {
     const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
 
     expect(ran.deny).toBeUndefined()
+  })
+
+  test("is refused when the session entered a workflow's worktree and the shell moved to the main checkout", async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    leaveWorktree(fake, where)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('/workflow done login')
+  })
+
+  test("is refused when the session entered a workflow's worktree and the shell moved into a repository nested in it", async ($, on) => {
+    const { where } = await inWorktree($, on)
+    where.toplevels.set(`${WORKTREE}/vendor/lib`, `${WORKTREE}/vendor/lib`)
+    where.cwd = `${WORKTREE}/vendor/lib`
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('/workflow done login')
+  })
+
+  test("is allowed when the worktree the session entered is an abandoned workflow's", async ($, on) => {
+    const { fake, where } = await inWorktree($, on, repo({ status: 'abandoned' }))
+    leaveWorktree(fake, where)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+
+  test('is refused when git finds no repository in the session folder', async ($, on) => {
+    const { where } = fakeIn(on, repo(), BRANCH, '/elsewhere')
+    where.toplevels.set('/elsewhere', null)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('keep')
+  })
+
+  test('is refused when git cannot resolve the worktree the session entered', async ($, on) => {
+    const { fake, where } = await inWorktree($, on)
+    leaveWorktree(fake, where)
+    where.toplevels.set(WORKTREE, null)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('keep')
   })
 })

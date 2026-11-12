@@ -26,6 +26,9 @@ export type WorkflowBanner = {
 
 export type WorkflowVerified = { slug: string; slice: number }
 
+// The build agents whose run ends with a hand-over, by agentId, to the slug of the workflow they verified a slice of.
+export type WorkflowHandovers = Record<string, string>
+
 declare module 'claude-code' {
   // The mod's own tools, declared here because the generated MCP types list only the tools of the session that last
   // saved the mod, and a session outside a workflow repo never registers these.
@@ -47,6 +50,7 @@ declare module 'claude-code' {
       activity: Shaped<WorkflowActivity>
       verified: Shaped<WorkflowVerified | null>
       enteredWorktree: Shaped<string | null>
+      handovers: Shaped<WorkflowHandovers>
     }
   }
 }

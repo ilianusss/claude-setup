@@ -206,6 +206,22 @@ describe('the second line of the band', () => {
     expect(waiting).toContain('waiting for you')
   })
 
+  test('a failing activity update still submits the prompt and is logged to debug', async ($, on) => {
+    const logged: Array<{ text: string; to: string }> = []
+    on('ui.log', (_, e) => {
+      logged.push({ text: e.text, to: e.to })
+      return { value: undefined }
+    })
+    on('state.set', { plugin: 'workflow', key: 'activity' }, () => ({ deny: 'the state host is gone' }))
+    const fake = fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    await submitPrompt($)
+
+    expect(fake.prompts).toEqual(['Go on.'])
+    expect(logged.filter(line => line.to === 'debug').map(line => line.text).join('\n')).toContain('the state host is gone')
+  })
+
   test("stays working when a step agent's turn completes", async ($, on) => {
     fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
     await start($)

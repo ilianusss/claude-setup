@@ -1,6 +1,7 @@
-import type { On } from 'claude-code'
+import type { EngineInterface, On } from 'claude-code'
 
 import type { WorkflowActivity, WorkflowBanner } from '../types'
+import { describe } from './refusal'
 import { ACTIVITY_TEXT, currentActivity, currentBanner, phaseText, setActivity } from './status'
 
 export type StepSegment = { label: string; isCurrent: boolean }
@@ -47,13 +48,36 @@ export function detailLine(view: WorkflowBanner, now: WorkflowActivity, columns:
   return { lead: `${shortened(step, columns - tail.length - shown.length)}${tail}`, activity: shown }
 }
 
+// The band is a display and this hook runs in every session: a failed update is logged, and the prompt goes on.
+function logActivityFailure($: EngineInterface, error: unknown): void {
+  $.ui.log(`workflow: the band's activity could not be updated: ${describe(error)}`, { to: 'debug' })
+}
+
+async function markWorking($: EngineInterface): Promise<WorkflowActivity | undefined> {
+  try {
+    const before = await currentActivity($)
+    await setActivity($, 'working')
+    return before
+  } catch (error) {
+    logActivityFailure($, error)
+    return undefined
+  }
+}
+
+async function restoreActivity($: EngineInterface, before: WorkflowActivity): Promise<void> {
+  try {
+    await setActivity($, before)
+  } catch (error) {
+    logActivityFailure($, error)
+  }
+}
+
 export function registerBanner(on: On): void {
   on('prompt.submit', async ($, e, next) => {
     if (e.command !== undefined) return next(e)
-    const before = await currentActivity($)
-    await setActivity($, 'working')
+    const before = await markWorking($)
     const submitted = await next(e)
-    if (submitted.drop !== undefined) await setActivity($, before)
+    if (submitted.drop !== undefined && before !== undefined) await restoreActivity($, before)
     return submitted
   })
 

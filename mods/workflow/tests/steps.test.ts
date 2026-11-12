@@ -1,4 +1,4 @@
-import type { AgentSpec } from 'claude-code'
+import type { AgentSpec, On } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
@@ -284,6 +284,42 @@ describe('the hand-over after a slice the build agent verified', () => {
 
     expect(before).toBe(0)
     expect(fake.prompts).toHaveLength(1)
+  })
+})
+
+// A reload keeps $.state and starts the module's own variables over, and the kit has no reload: these hooks stand for
+// the one value the module wrote before it, and the kit answers every other.
+function heldBeforeReload(on: On, pending: Record<string, string>): void {
+  let held: { value: unknown; version: number } = { value: { shape: 'handovers-1', value: pending }, version: 1 }
+  on('state.get', { plugin: 'workflow', key: 'handovers' }, () => ({ value: held }))
+  on('state.set', { plugin: 'workflow', key: 'handovers' }, (_, e) => {
+    if (e.ifVersion !== undefined && e.ifVersion !== held.version) return { value: { isSet: false, version: held.version } }
+    held = { value: e.value, version: held.version + 1 }
+    return { value: { isSet: true, version: held.version } }
+  })
+}
+
+describe('a reload of the mod', () => {
+  test('a hand-over recorded before the reload is delivered when the build agent ends after it', async ($, on) => {
+    heldBeforeReload(on, { a1: 'login' })
+    const fake = fakeEngine(on, sliceRepo({ auto_next: 'yes', slice: '2' }), 'feat/login')
+    await start($)
+
+    await agentEnds($, fake, 'a1')
+
+    expect(fake.prompts).toHaveLength(1)
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
+  })
+
+  test('registers the step agents of the workflow on the branch again', async ($, on) => {
+    const fake = fakeEngine(on, DESIGN, 'feat/login')
+    await start($)
+    const registered = fake.agents.length
+
+    await start($)
+
+    expect(fake.agents.slice(registered).map(spec => spec.name)).toEqual(fake.agents.slice(0, registered).map(spec => spec.name))
+    expect(registered).toBeGreaterThan(0)
   })
 })
 

@@ -1,3 +1,4 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RegisteredToolSpec } from 'claude-code'
 
 import { registerAgents } from './agents'
@@ -20,6 +21,10 @@ import { inPhase, phaseAfter, withLog } from './state'
 import type { Workflow } from './state'
 import { announcePhase, clearVerified, markVerified, refreshStatus, turnEnded } from './status'
 import { saveWorkflow } from './store'
+
+// Kept in $.state, which a reload of the mod keeps, so a build agent that verified a slice before a reload still hands
+// over when its run ends after it.
+const handovers = atom({ plugin: 'workflow', key: 'handovers' } as const, {}, { shape: 'handovers-1' })
 
 const TOOLS: readonly RegisteredToolSpec[] = [
   {
@@ -326,7 +331,7 @@ async function lockTool($: EngineInterface): Promise<ToolAnswer> {
   }
 }
 
-async function verifyTool($: EngineInterface, runtime: Runtime, agentId: string | undefined): Promise<ToolAnswer> {
+async function verifyTool($: EngineInterface, agentId: string | undefined): Promise<ToolAnswer> {
   try {
     const context = await contextOf($)
     const verified = await verifySlice($, context, await $.clock.now())
@@ -334,18 +339,25 @@ async function verifyTool($: EngineInterface, runtime: Runtime, agentId: string 
     else await markVerified($, verified.advanced, verified.slice)
     await registerAgents($)
     if (agentId === undefined) return await answered($, await verifiedForConversation($, context, verified))
-    runtime.handovers.set(agentId, verified.advanced.slug)
+    const slug = verified.advanced.slug
+    await update($, handovers, pending => ({ ...pending, [agentId]: slug }))
     return await answered($, verifiedForAgent(verified))
   } catch (error) {
     return failure(error)
   }
 }
 
-async function handOver($: EngineInterface, runtime: Runtime, agentId: string): Promise<void> {
-  const slug = runtime.handovers.get(agentId)
-  if (slug === undefined) return
-  runtime.handovers.delete(agentId)
+async function takeHandover($: EngineInterface, agentId: string): Promise<string | undefined> {
+  const slug = (await read($, handovers))[agentId]
+  if (slug === undefined) return undefined
+  await update($, handovers, pending => Object.fromEntries(Object.entries(pending).filter(([id]) => id !== agentId)))
+  return slug
+}
+
+async function handOver($: EngineInterface, agentId: string): Promise<void> {
   try {
+    const slug = await takeHandover($, agentId)
+    if (slug === undefined) return
     await clearVerified($)
     const context = await contextOf($)
     const workflow = context.workflows.find(candidate => candidate.slug === slug)
@@ -384,7 +396,7 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
     e.agentId === undefined ? advanceTool($, runtime, inputOf(e)) : refusedInStepAgent(e.tool),
   )
   on('tool.call', { tool: 'mcp__workflow__lock' }, $ => lockTool($))
-  on('tool.call', { tool: 'mcp__workflow__verify' }, ($, e) => verifyTool($, runtime, e.agentId))
+  on('tool.call', { tool: 'mcp__workflow__verify' }, ($, e) => verifyTool($, e.agentId))
   on('tool.call', { tool: 'mcp__workflow__unlock' }, ($, e) =>
     e.agentId === undefined ? unlockTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
@@ -404,7 +416,7 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
   on('turn.complete', async ($, e, next) => {
     const ended = await next(e)
     if (e.agentId !== undefined) {
-      await handOver($, runtime, e.agentId)
+      await handOver($, e.agentId)
       await endReviewRound($, { reason: e.reason, agentId: e.agentId })
     } else {
       await turnEnded($)
