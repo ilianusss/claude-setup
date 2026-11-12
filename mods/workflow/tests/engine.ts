@@ -1,4 +1,4 @@
-import type { On } from 'claude-code'
+import type { AgentSpec, On, PaneOpenArgs } from 'claude-code'
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 
@@ -23,24 +23,73 @@ const PHASE_WRITES: Record<string, string> = {
   retro: '["{specsDir}/{slug}/**", "CLAUDE.md", ".claude/**", "docs/**"]',
 }
 
+export const BUILD_PHASE = `# The build phase
+
+Build the current slice.
+
+## With the user
+
+Talk the user through the slice.
+
+## Agent
+
+Do the build work.
+`
+
+export const INTAKE_PHASE = `# The intake phase
+
+## With the user
+
+1. **Ask** the user, in their words:
+   - The problem: what is wrong or missing today.
+   - The result wanted: what exists once this workflow is done.
+   - How success will show: what the user will see.
+   - The limits: what must not change.
+   - Out of scope: what this workflow will not do.
+2. **Restate** your understanding and ask the user to confirm it.
+3. **Save.** Call mcp__workflow__handoff with \`goal\` set to the confirmed restatement.
+4. **Gate.** Call mcp__workflow__advance with the confirmed restatement as the summary.
+`
+
+export const REVIEWER_AGENT = '---\nname: reviewer\ntools: Read, Grep, Glob, Bash\nskills:\n  - writing-clean-code\n---\n\nYou review a change you did not write.\n'
+
+const PHASES_WITH_AGENT = ['setup', 'spec', 'design', 'slice', 'inspect']
+
+function phaseWithAgent(name: string): string {
+  const map = name === 'design' ? '\n## Map agent\n\nMap the project.\n' : ''
+  return `# The ${name} phase\n\n## With the user\n\nDo the ${name} work.\n\n## Agent\n\nWork as the ${name} agent.\n${map}`
+}
+
 export type Fake = {
   files: Map<string, string>
   committed: Map<string, string>
   branch: string
+  toplevel: string
   isLinked: boolean
   behind: number
   gitLog: string
   prompts: string[]
+  fills: string[]
   commands: string[]
   statuses: Array<string | undefined>
   toasts: string[]
   tools: string[]
+  agents: AgentSpec[]
   answers: string[]
   questions: string[]
   bash: Map<string, number>
   shellWrites: Map<string, Record<string, string>>
+  missing: string[]
   trees: Map<string, Map<string, string>>
   clock: MockClock
+  isPlaced: boolean
+  opened: PaneOpenArgs[]
+  closed: string[]
+  porcelain: string
+  unpushed: string | undefined
+  refs: Map<string, string>
+  worktreeRemoveExit: number
+  gitRuns: Array<{ cwd: string; line: string }>
 }
 
 function fnv(text: string): string {
@@ -60,7 +109,7 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
   const line = args.join(' ')
   const ok = (stdout: string) => ({ exitCode: 0, stdout })
   if (line === 'rev-parse --path-format=absolute --show-toplevel --git-common-dir --git-dir') {
-    return ok(`${ROOT}\n${ROOT}/.git\n${fake.isLinked ? `${ROOT}/.git/worktrees/x` : `${ROOT}/.git`}\n`)
+    return ok(`${fake.toplevel}\n${ROOT}/.git\n${fake.isLinked ? `${ROOT}/.git/worktrees/x` : `${ROOT}/.git`}\n`)
   }
   if (line === 'symbolic-ref --quiet --short HEAD') return ok(`${fake.branch}\n`)
   if (line === 'add -A') return ok('')
@@ -83,6 +132,17 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
     fake.branch = args[args.length - 1] ?? fake.branch
     return ok('')
   }
+  if (line === 'status --porcelain --untracked-files=normal') return ok(fake.porcelain)
+  if (line === 'rev-list @{u}..HEAD') return fake.unpushed === undefined ? { exitCode: 128, stdout: '' } : ok(fake.unpushed)
+  if (args[0] === 'rev-parse' && args[1] === '--verify' && args[2] === '--quiet') {
+    const commit = fake.refs.get(args[3] ?? '')
+    return commit === undefined ? { exitCode: 1, stdout: '' } : ok(`${commit}\n`)
+  }
+  if (args[0] === 'worktree' && args[1] === 'remove') return { exitCode: fake.worktreeRemoveExit, stdout: '' }
+  if (args[0] === 'branch' && args[1] === '-D') {
+    fake.refs.delete(args[2] ?? '')
+    return ok('')
+  }
   if (args[0] === 'worktree') return ok('')
   if (line === 'symbolic-ref --quiet --short refs/remotes/origin/HEAD') return ok('origin/main\n')
   if (line === 'rev-list --count HEAD..origin/main') return ok(`${fake.behind}\n`)
@@ -103,9 +163,15 @@ function children(fake: Fake, dir: string): Array<{ name: string; kind: 'file' |
 }
 
 function shippedFile(path: string): string | undefined {
+  if (path.endsWith('/agents/reviewer.md')) return REVIEWER_AGENT
   const match = /\/(phases|guides|templates)\/([\w-]+)\.(md|json)$/.exec(path)
   if (match === null) return undefined
   const [, folder, name] = match
+  if (folder === 'phases' && name === 'build') return `---\nwrites: ["**"]\n---\n${BUILD_PHASE}`
+  if (folder === 'phases' && name === 'intake') return `---\nwrites: []\n---\n${INTAKE_PHASE}`
+  if (folder === 'phases' && PHASES_WITH_AGENT.includes(name ?? '')) {
+    return `---\nwrites: ${PHASE_WRITES[name ?? ''] ?? '[]'}\n---\n${phaseWithAgent(name ?? '')}`
+  }
   if (folder === 'phases') return `---\nwrites: ${PHASE_WRITES[name ?? ''] ?? '[]'}\n---\n# The ${name} phase\n\nDo the ${name} work.\n`
   return `# ${name}\n`
 }
@@ -115,20 +181,32 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     files: new Map(Object.entries(files)),
     committed: new Map(),
     branch,
+    toplevel: ROOT,
     isLinked: false,
     behind: 0,
     gitLog: '',
     prompts: [],
+    fills: [],
     commands: [],
     statuses: [],
     toasts: [],
     tools: [],
+    agents: [],
     answers: [],
     questions: [],
     bash: new Map(),
     shellWrites: new Map(),
+    missing: [],
     trees: new Map(),
     clock: mock.clock(on, { now: NOW }),
+    isPlaced: true,
+    opened: [],
+    closed: [],
+    porcelain: '',
+    unpushed: undefined,
+    refs: new Map(),
+    worktreeRemoveExit: 0,
+    gitRuns: [],
   }
   mock.store(on)
 
@@ -136,6 +214,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('session.cwd', () => ({ value: ROOT }))
   on('session.id', () => ({ value: 's1' }))
   on('fs.read', (_, e) => {
+    if (fake.missing.some(suffix => e.path.endsWith(suffix))) throw new Error(`ENOENT: ${e.path}`)
     const text = fake.files.get(e.path) ?? shippedFile(e.path)
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
@@ -147,6 +226,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('fs.exists', (_, e) => ({ value: fake.files.has(e.path) || [...fake.files.keys()].some(path => path.startsWith(`${e.path}/`)) }))
   on('fs.list', (_, e) => ({ value: children(fake, e.path) }))
   on('process.run', (_, e) => {
+    if (e.argv[0] === 'git') fake.gitRuns.push({ cwd: e.init?.cwd ?? '', line: e.argv.slice(1).join(' ') })
     const ran = e.argv[0] === 'git' ? git(fake, e.argv.slice(1)) : { exitCode: 127, stdout: '' }
     return { value: { ...ran, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -179,6 +259,10 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     fake.tools.push(`mcp__workflow__${e.name}`)
     return { value: { tool: `mcp__workflow__${e.name}` } }
   })
+  on('agent.register', (_, e) => {
+    fake.agents.push(e)
+    return { value: { agent: `workflow:${e.name}` } }
+  })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('command.run', (_, e) => {
     fake.commands.push(e.command)
@@ -187,6 +271,10 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('prompt.submit', (_, e) => {
     fake.prompts.push(e.text)
     return { text: e.text }
+  })
+  on('prompt.fill', (_, e) => {
+    fake.fills.push(e.text)
+    return { isFilled: true }
   })
   on('ui.status', (_, e) => {
     fake.statuses.push(e.text)
@@ -197,6 +285,15 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     return { value: undefined }
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('ui.open', (_, e) => {
+    fake.opened.push(e)
+    return { value: fake.isPlaced ? { isPlaced: true } : { isPlaced: false, reason: 'the terminal is 80 columns wide, under 144' } }
+  })
+  on('ui.close', (_, e) => {
+    fake.closed.push(e.id)
+    return { value: undefined }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
   return fake
 }
 
