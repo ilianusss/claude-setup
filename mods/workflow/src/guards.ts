@@ -78,6 +78,17 @@ async function scopeNotes($: EngineInterface, watch: ScopeWatch): Promise<string
   }
 }
 
+// ExitWorktree's remove deletes the worktree and its branch with none of the ending's checks (clean, pushed, the
+// user's yes in the mod's dialog), so the only removal of a workflow's worktree is the ending's.
+async function removalRefusal($: EngineInterface): Promise<string | undefined> {
+  const context = await loadContext($)
+  if (context === undefined) return undefined
+  const cwd = await $.session.cwd()
+  const held = context.workflows.find(workflow => workflow.status !== 'abandoned' && relativeTo(workflow.worktree, cwd) !== undefined)
+  if (held === undefined) return undefined
+  return `workflow: ExitWorktree with action "remove" would delete the worktree of the workflow "${held.slug}" without checking that it is clean and pushed, or asking the user. Leave it with action "keep": \`/workflow done ${held.slug}\` offers to remove it once it is clean and pushed, and after the user's yes mcp__workflow__finish removes it.`
+}
+
 function failed(what: string): { deny: string } {
   return { deny: `workflow: the guard on ${what} failed, so the call is refused.` }
 }
@@ -97,6 +108,12 @@ export function registerGuards(on: On): void {
     const reason = await writeRefusal($, e.notebook_path)
     return reason === undefined ? next(e) : { deny: reason }
   }).catch(($, e, next) => (next.called ? next(e) : failed('a notebook edit')))
+
+  on('tool.call', { tool: 'ExitWorktree' }, async ($, e, next) => {
+    if (e.action !== 'remove') return next(e)
+    const reason = await removalRefusal($)
+    return reason === undefined ? next(e) : { deny: reason }
+  }).catch(($, e, next) => (next.called ? next(e) : failed('ExitWorktree')))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const watch = await watchScope($)

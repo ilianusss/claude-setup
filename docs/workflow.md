@@ -126,6 +126,8 @@ On "Remove them":
 - Inside the worktree the session entered with `EnterWorktree`, Claude leaves it with `ExitWorktree` (`action: "keep"`), then calls `mcp__workflow__finish`. The tool is refused while the session is still inside the worktree, from a step agent, and without your yes in this session.
 - In a session that started inside the worktree, which `ExitWorktree` cannot leave, you are told to run `/workflow done <slug>` from a session in the main checkout.
 
+`ExitWorktree` with `action: "remove"` is refused while the session is inside the worktree of an open or done workflow, from the conversation or a step agent: it would delete the worktree and its branch with none of these checks.
+
 The removal runs the checks again first and removes nothing if a change appeared since the dialog. It runs `git worktree remove <path>` from the main checkout, without `--force`, then `git branch -D <branch>` only when the branch points at its upstream's commit; otherwise the branch stays and the answer says why. The state logs "worktree removed" and stays in the shared `.git`, so `/workflow` still lists the workflow as done.
 
 ## Several workflows at once

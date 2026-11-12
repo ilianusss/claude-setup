@@ -475,3 +475,69 @@ describe('checking again at removal time (AC5)', () => {
     expect(removals(fake)).toEqual([])
   })
 })
+
+describe('ExitWorktree with action remove', () => {
+  test("is refused inside an open workflow's worktree, naming /workflow done and mcp__workflow__finish", async ($, on) => {
+    fakeIn(on, repo(), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('/workflow done login')
+    expect(ran.deny).toContain('mcp__workflow__finish')
+  })
+
+  test("is refused inside a done workflow's worktree, even with discard_changes", async ($, on) => {
+    fakeIn(on, doneRepo(), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove', discard_changes: true })
+
+    expect(ran.deny).toContain('/workflow done login')
+  })
+
+  test("is refused in a subfolder of a workflow's worktree", async ($, on) => {
+    fakeIn(on, repo(), BRANCH, `${WORKTREE}/src`)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toContain('/workflow done login')
+  })
+
+  test('is refused from a step agent too', async ($, on) => {
+    fakeIn(on, repo(), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove', agentId: 'a1' })
+
+    expect(ran.deny).toContain('/workflow done login')
+  })
+
+  test("with action keep is allowed inside a workflow's worktree", async ($, on) => {
+    fakeIn(on, repo(), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'keep' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+
+  test("is allowed outside any workflow's worktree", async ($, on) => {
+    fakeIn(on, repo(), BRANCH, `${ROOT}-scratch`)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+
+  test('is allowed in the worktree of an abandoned workflow', async ($, on) => {
+    fakeIn(on, repo({ status: 'abandoned' }), BRANCH, WORKTREE)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'ExitWorktree', action: 'remove' })
+
+    expect(ran.deny).toBeUndefined()
+  })
+})
