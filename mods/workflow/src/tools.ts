@@ -219,7 +219,7 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   }
 
   const choice = workflow.phase === 'intake' && answer === GATE.approve ? await askPlan($, workflow, recommendations) : workflow.models
-  const status = target === 'done' ? 'done' : answer === GATE.stop ? 'paused' : workflow.status
+  const status = target === 'done' ? 'done' : answer === GATE.stop ? 'paused' : 'active'
   let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
   await saveWorkflow($, context.repo, context.paths, moved)
   if (answer === GATE.approve) announcePhase($, moved)

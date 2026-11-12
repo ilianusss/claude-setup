@@ -234,17 +234,27 @@ export function verifiedForAgent(verified: Verified): string {
   ].join('\n')
 }
 
+async function withStatus($: EngineInterface, context: Context, workflow: Workflow, status: 'active' | 'paused'): Promise<void> {
+  if (workflow.status === status) return
+  const now = await $.clock.now()
+  await saveWorkflow($, context.repo, context.paths, withLog({ ...workflow, status, updated: iso(now) }, day(now), status === 'active' ? 'resumed' : 'paused'))
+}
+
 export async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<string> {
   if (advanced.phase === 'inspect') {
+    await withStatus($, context, advanced, 'active')
     return `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`
   }
-  if (advanced.autoNext) return `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}`
+  if (advanced.autoNext) {
+    await withStatus($, context, advanced, 'active')
+    return `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}`
+  }
   const answer = await askOrUndefined($, NEXT_SLICE.question(advanced.slug, advanced.slice - 1), [NEXT_SLICE.start(advanced.slice), NEXT_SLICE.stop], 'Next slice')
   if (answer === NEXT_SLICE.start(advanced.slice)) {
+    await withStatus($, context, advanced, 'active')
     return `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}`
   }
-  const now = await $.clock.now()
-  await saveWorkflow($, context.repo, context.paths, withLog({ ...advanced, status: 'paused', updated: iso(now) }, day(now), 'paused'))
+  await withStatus($, context, advanced, 'paused')
   return `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}`
 }
 

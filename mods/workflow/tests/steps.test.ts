@@ -322,4 +322,27 @@ describe('Stop here at a gate', () => {
 
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'build', slice: 2, status: 'paused' })
   })
+
+  test('Continue at the next gate makes the workflow active again, so a write outside the phase is refused', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ size: 'project', phase: 'spec', slice: '0' }) }), 'feat/login')
+    fake.answers.push(GATE.stop, GATE.approve)
+    await start($)
+    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Spec written.' })
+
+    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    const ran = await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/login.ts`, content: 'export {}' })
+
+    expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'slice', status: 'active' })
+    expect(ran.deny).toContain('the slice phase')
+  })
+
+  test('starting the next slice from the next-slice dialog makes a paused workflow active again', async ($, on) => {
+    const fake = fakeEngine(on, sliceRepo({ status: 'paused' }), 'feat/login')
+    fake.answers.push(NEXT_SLICE.start(2))
+    await verifiedByAgent($, fake)
+
+    await agentEnds($, fake, 'a1')
+
+    expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'build', slice: 2, status: 'active' })
+  })
 })
