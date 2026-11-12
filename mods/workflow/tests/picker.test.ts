@@ -202,6 +202,23 @@ describe('the model picker panel', () => {
     await ui.unmount()
   })
 
+  test('after Stop here at the intake, Use these saves the plan and sends no phase prompt', async ($, on) => {
+    const fake = fakeEngine(on, INTAKE, 'feat/login')
+    fake.answers.push(GATE.stop, MODELS.perStep)
+    await start($)
+    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.', recommendations: RECOMMENDATIONS })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.select({ key: 'model-build', value: 'sonnet' })
+
+    await ui.press({ key: 'use' })
+    await fake.clock.settle()
+
+    expect(state(fake)).toMatchObject({ phase: 'design', status: 'paused' })
+    expect(state(fake).models.build.model).toBe('sonnet')
+    expect(fake.prompts).toHaveLength(0)
+    await ui.unmount()
+  })
+
   test('Cancel keeps the plan, closes the panel and goes on with the next phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     await choosingAtIntake($, fake)

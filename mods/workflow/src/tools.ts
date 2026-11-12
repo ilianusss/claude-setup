@@ -190,6 +190,10 @@ function choosingPrompt(workflow: Workflow): string {
   return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase. The user is choosing each step's model and effort in the Models panel. End your turn now, with a Next: line saying they choose the models in the panel: the mod sends you the ${workflow.phase} phase prompt once they confirm or cancel.`
 }
 
+function stopWhileChoosing(workflow: Workflow): string {
+  return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase, and the user stops here once they have chosen each step's model and effort in the Models panel. ${stopPrompt(workflow)}`
+}
+
 async function advance($: EngineInterface, runtime: Runtime, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
   const workflow = currentOf(context)
   if (workflow.phase === 'build') {
@@ -218,18 +222,19 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
     return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
   }
 
-  const choice = workflow.phase === 'intake' && answer === GATE.approve ? await askPlan($, workflow, recommendations) : workflow.models
-  const status = target === 'done' ? 'done' : answer === GATE.stop ? 'paused' : 'active'
+  const isStopping = answer === GATE.stop
+  const choice = workflow.phase === 'intake' ? await askPlan($, workflow, recommendations) : workflow.models
+  const status = target === 'done' ? 'done' : isStopping ? 'paused' : 'active'
   let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
   await saveWorkflow($, context.repo, context.paths, moved)
-  if (answer === GATE.approve) announcePhase($, moved)
+  if (!isStopping) announcePhase($, moved)
   if (choice !== 'per step') moved = await savePlan($, context, moved, choice, now)
   else {
-    const chosen = await chooseModels($, context, moved, recommendations, 'phase')
+    const chosen = await chooseModels($, context, moved, recommendations, isStopping ? 'stay' : 'phase')
     if (chosen === 'pane') {
       await refreshStatus($)
       await registerAgents($)
-      return choosingPrompt(moved)
+      return isStopping ? stopWhileChoosing(moved) : choosingPrompt(moved)
     }
     moved = chosen
   }

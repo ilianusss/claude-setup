@@ -66,15 +66,33 @@ describe('the model question at the intake gate', () => {
     expect(offered[1]).toEqual(['Use the defaults', 'Choose per step'])
   })
 
-  test('is not asked after Stop here', async ($, on) => {
+  test('is asked after Stop here too, and the answer is saved before the workflow pauses', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.stop)
+    fake.answers.push(GATE.stop, MODELS.recommended)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
 
-    expect(fake.questions).toHaveLength(1)
-    expect(state(fake).phase).toBe('design')
+    expect(fake.questions[1]).toBe(MODELS.question)
+    expect(state(fake)).toMatchObject({
+      phase: 'design',
+      status: 'paused',
+      models: { ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' }, review: { model: 'opus', effort: 'xhigh' } },
+    })
+    expect(text(ran)).toContain('/workflow continue login')
+  })
+
+  test('after Stop here, choosing per step in the panel says the user stops once they have chosen', async ($, on) => {
+    const fake = fakeEngine(on, INTAKE, 'feat/login')
+    fake.answers.push(GATE.stop, MODELS.perStep)
+    await start($)
+
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+
+    expect(fake.opened[0]).toMatchObject({ id: PANE })
+    expect(text(ran)).toContain('Models panel')
+    expect(text(ran)).toContain('/workflow continue login')
+    expect(state(fake)).toMatchObject({ phase: 'design', status: 'paused' })
   })
 
   test('is not asked at the gate of another phase', async ($, on) => {
