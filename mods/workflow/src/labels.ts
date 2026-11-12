@@ -56,6 +56,22 @@ export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }
 
+const IGNORED_SHOWN = 5
+
+function ignoredNote(ignored: readonly string[]): string {
+  if (ignored.length === 0) return ''
+  const shown = ignored.slice(0, IGNORED_SHOWN).join(', ')
+  const more = ignored.length > IGNORED_SHOWN ? ` and ${ignored.length - IGNORED_SHOWN} more` : ''
+  return ` Its ignored files are deleted with it: ${shown}${more}.`
+}
+
+export const ENDING = {
+  question: (worktree: string, branch: string, ignored: readonly string[] = []) =>
+    `Remove the worktree ${worktree} and the local branch ${branch}? The worktree has no uncommitted change and the branch is pushed.${ignoredNote(ignored)}`,
+  remove: 'Remove them',
+  keep: 'Keep them',
+}
+
 export const PRODUCES: Readonly<Record<Exclude<Phase, 'done'>, string>> = {
   intake: 'the goal of this workflow, agreed with the user',
   setup: '.claude/workflow.json, the project CLAUDE.md and its settings',

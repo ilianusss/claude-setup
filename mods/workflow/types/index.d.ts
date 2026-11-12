@@ -36,6 +36,7 @@ declare module 'claude-code' {
     mcp__workflow__verify: {}
     mcp__workflow__unlock: { file: string; reason: string }
     mcp__workflow__progress: { step: number }
+    mcp__workflow__finish: {}
   }
 
   interface PluginState {
@@ -45,6 +46,7 @@ declare module 'claude-code' {
       banner: Shaped<WorkflowBanner | null>
       activity: Shaped<WorkflowActivity>
       verified: Shaped<WorkflowVerified | null>
+      enteredWorktree: Shaped<string | null>
     }
   }
 }

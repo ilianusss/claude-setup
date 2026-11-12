@@ -142,7 +142,7 @@ Design: Components, Data model, Key flows
 Depends on: Slice 5
 
 ## Slice 9: The ending
-- [ ] Done
+- [x] Done
 
 Goal: a finished workflow leaves nothing behind but the merged work.
 Acceptance criteria:

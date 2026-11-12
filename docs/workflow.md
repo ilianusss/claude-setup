@@ -25,7 +25,7 @@ Every workflow starts with the intake, where Claude asks what you want. In a pro
 | `/workflow pause` | Claude writes the handoff, then stops |
 | `/workflow models` | Opens the Models panel for the workflow on this branch, its current plan preselected, to change each step's model and effort at any time |
 | `/workflow unlock <file> <reason>` | You unlock a locked test yourself |
-| `/workflow done <slug>` | Closes it; a project is offered its retro first |
+| `/workflow done <slug>` | Closes it; a project is offered its retro first. Then offers to remove the worktree and the local branch once they are clean and pushed (see The ending) |
 | `/workflow abandon <slug> <reason>` | Closes it with the reason |
 | `/workflow adopt` | Sets up a project without `workflow.json`, and rebuilds workflows from spec folders whose state was lost (a fresh clone). The phase follows the documents there; a folder without `spec.md`, `design.md` or `slices.md` starts again at the intake |
 
@@ -76,7 +76,7 @@ Your conversation talks to you; agents do the work. Each phase file has a "With 
 | `workflow:build` | Builds one slice; in inspect, fixes review findings | build, inspect |
 | `workflow:review` | Reviews the branch, read-only (`Read`, `Grep`, `Glob`, `Bash`), with the prompt of `agents/reviewer.md` | inspect |
 
-An agent gets only its "Agent" section and the shared worker rules, which end with its report format: what it did, the files, the checks, and its open questions. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff`, `mcp__workflow__unlock` or `AskUserQuestion`: in the spec and design phases the conversation asks you the questions and the agents research, draft and return what they could not settle. The intake and the retro have no agent and run in the conversation.
+An agent gets only its "Agent" section and the shared worker rules, which end with its report format: what it did, the files, the checks, and its open questions. It cannot call `mcp__workflow__advance`, `mcp__workflow__handoff`, `mcp__workflow__unlock` or `AskUserQuestion`, and the mod refuses `mcp__workflow__progress` and `mcp__workflow__finish` from it: in the spec and design phases the conversation asks you the questions and the agents research, draft and return what they could not settle. The intake and the retro have no agent and run in the conversation.
 
 ## A slice, step by step
 
@@ -110,6 +110,23 @@ The inspect phase reviews the branch in rounds:
 The mod counts the rounds: each time a `workflow:review` run ends with its report in inspect (an interrupted run does not count), it saves `review_round` in the state, logs "review round N" and writes a dim transcript line, and the band shows "inspect: review round N/3". The inspect prompt tells the conversation how many rounds have ended, so the count survives a pause. The count resets when the workflow leaves inspect.
 
 **Fixes in inspect run without the test lock.** `mcp__workflow__lock` and `mcp__workflow__verify` belong to the build phase and stay refused in inspect. In this phase the `workflow:build` agent's prompt replaces the slice with "Fixing review findings": for each finding, a failing test first (a bug found in review gets its failing test before its fix), seen to fail for the reason the finding names, then the smallest fix; then lint, typecheck and the full suite exactly as written, each result in its report. The next review round checks the fixes, tests included.
+
+## The ending
+
+When the workflow closes (a feature's inspect gate, a project's retro gate, or `/workflow done <slug>`), the mod checks the worktree it created:
+
+- no uncommitted change, untracked files included (`git status --porcelain`);
+- the branch has an upstream and nothing left to push (`git rev-list @{u}..HEAD` is empty).
+
+When both hold, it asks whether to remove the worktree and the local branch. The dialog names both, and the ignored files the removal deletes with the worktree, such as `.env` or `node_modules/` (the top-level entries of `git status --ignored`, five at most, then a count). When a check fails, it keeps both, says which check failed, and `/workflow done <slug>` asks again once that is fixed. A workflow that ran in the main checkout is offered nothing, and a default branch is never deleted.
+
+On "Remove them":
+
+- From a session in the main checkout (`/workflow done <slug>` there), the mod removes them directly.
+- Inside the worktree the session entered with `EnterWorktree`, Claude leaves it with `ExitWorktree` (`action: "keep"`), then calls `mcp__workflow__finish`. The tool is refused while the session is still inside the worktree, from a step agent, and without your yes in this session.
+- In a session that started inside the worktree, which `ExitWorktree` cannot leave, you are told to run `/workflow done <slug>` from a session in the main checkout.
+
+The removal runs the checks again first and removes nothing if a change appeared since the dialog. It runs `git worktree remove <path>` from the main checkout, without `--force`, then `git branch -D <branch>` only when the branch points at its upstream's commit; otherwise the branch stays and the answer says why. The state logs "worktree removed" and stays in the shared `.git`, so `/workflow` still lists the workflow as done.
 
 ## Several workflows at once
 

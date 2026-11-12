@@ -7,6 +7,7 @@ import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
+import { offerEnding } from './ending'
 import { ADOPT, BRANCH, CHAINING, COMMITS, RETRO, SIZE, SWITCH } from './labels'
 import { chooseModels, recommendationsFor } from './picker'
 import { DEFAULT_PLAN, renderPlan } from './plan'
@@ -233,10 +234,19 @@ async function close($: EngineInterface, session: Session, slug: string | undefi
       return `starting the retro of "${target.slug}".`
     }
   }
-  const done: Workflow = { ...inPhase(target, 'done'), status: 'done', updated: iso(now) }
-  await saveWorkflow($, context.repo, context.paths, withLog(done, day(now), 'done'))
-  await refreshStatus($)
-  return `"${target.slug}" is done.`
+  let done = target
+  if (target.status !== 'done') {
+    done = withLog({ ...inPhase(target, 'done'), status: 'done', updated: iso(now) }, day(now), 'done')
+    await saveWorkflow($, context.repo, context.paths, done)
+    await refreshStatus($)
+  }
+  const closed = `"${target.slug}" is done.`
+  const ending = await offerEnding($, session.runtime, context, done, now)
+  if (ending.kind === 'leave') {
+    submitLater($, ending.prompt)
+    return `${closed} Claude leaves the worktree, then removes it.`
+  }
+  return ending.text === '' ? closed : `${closed} ${ending.text}`
 }
 
 function byThePerson(origin: PromptOrigin): boolean {

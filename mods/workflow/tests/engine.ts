@@ -84,6 +84,11 @@ export type Fake = {
   isPlaced: boolean
   opened: PaneOpenArgs[]
   closed: string[]
+  porcelain: string
+  unpushed: string | undefined
+  refs: Map<string, string>
+  worktreeRemoveExit: number
+  gitRuns: Array<{ cwd: string; line: string }>
 }
 
 function fnv(text: string): string {
@@ -124,6 +129,17 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
   if (line === 'ls-files --others --exclude-standard') return ok(workingFiles(fake).filter(path => !fake.committed.has(path)).join('\n'))
   if (args[0] === 'switch') {
     fake.branch = args[args.length - 1] ?? fake.branch
+    return ok('')
+  }
+  if (line === 'status --porcelain --untracked-files=normal') return ok(fake.porcelain)
+  if (line === 'rev-list @{u}..HEAD') return fake.unpushed === undefined ? { exitCode: 128, stdout: '' } : ok(fake.unpushed)
+  if (args[0] === 'rev-parse' && args[1] === '--verify' && args[2] === '--quiet') {
+    const commit = fake.refs.get(args[3] ?? '')
+    return commit === undefined ? { exitCode: 1, stdout: '' } : ok(`${commit}\n`)
+  }
+  if (args[0] === 'worktree' && args[1] === 'remove') return { exitCode: fake.worktreeRemoveExit, stdout: '' }
+  if (args[0] === 'branch' && args[1] === '-D') {
+    fake.refs.delete(args[2] ?? '')
     return ok('')
   }
   if (args[0] === 'worktree') return ok('')
@@ -184,6 +200,11 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     isPlaced: true,
     opened: [],
     closed: [],
+    porcelain: '',
+    unpushed: undefined,
+    refs: new Map(),
+    worktreeRemoveExit: 0,
+    gitRuns: [],
   }
   mock.store(on)
 
@@ -203,6 +224,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('fs.exists', (_, e) => ({ value: fake.files.has(e.path) || [...fake.files.keys()].some(path => path.startsWith(`${e.path}/`)) }))
   on('fs.list', (_, e) => ({ value: children(fake, e.path) }))
   on('process.run', (_, e) => {
+    if (e.argv[0] === 'git') fake.gitRuns.push({ cwd: e.init?.cwd ?? '', line: e.argv.slice(1).join(' ') })
     const ran = e.argv[0] === 'git' ? git(fake, e.argv.slice(1)) : { exitCode: 127, stdout: '' }
     return { value: { ...ran, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })

@@ -13,6 +13,7 @@ import { DEFAULT_PLAN, EFFORTS, MODELS as MODEL_NAMES, STEPS, parseRecommendatio
 import type { ModelPlan, Recommendation } from './plan'
 import { phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
+import { finish, offerEnding, rememberEnteredWorktree } from './ending'
 import { endReviewRound } from './review'
 import type { Runtime } from './runtime'
 import { inPhase, phaseAfter, withLog } from './state'
@@ -114,6 +115,13 @@ const TOOLS: readonly RegisteredToolSpec[] = [
     },
     isDeferred: false,
   },
+  {
+    name: 'finish',
+    description:
+      "Remove a finished workflow's worktree and local branch, once the user agreed to it in the mod's dialog and you left the worktree with ExitWorktree (action keep). The mod checks again that the worktree is clean and the branch pushed, and removes nothing otherwise.",
+    inputSchema: { type: 'object', properties: {} },
+    isDeferred: false,
+  },
 ]
 
 export async function registerToolsOnce($: EngineInterface, runtime: Runtime): Promise<void> {
@@ -182,7 +190,7 @@ function choosingPrompt(workflow: Workflow): string {
   return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase. The user is choosing each step's model and effort in the Models panel. End your turn now, with a Next: line saying they choose the models in the panel: the mod sends you the ${workflow.phase} phase prompt once they confirm or cancel.`
 }
 
-async function advance($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
+async function advance($: EngineInterface, runtime: Runtime, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
   const workflow = currentOf(context)
   if (workflow.phase === 'build') {
     refuse('the build phase moves on by itself: each slice closes with mcp__workflow__verify, and the last one moves the workflow to inspect.')
@@ -227,7 +235,12 @@ async function advance($: EngineInterface, context: Context, input: Record<strin
   }
   await refreshStatus($)
   await registerAgents($)
-  if (target === 'done') return `Approved: "${workflow.slug}" is done.`
+  if (target === 'done') {
+    const closed = `Approved: "${workflow.slug}" is done.`
+    const ending = await offerEnding($, runtime, context, moved, now)
+    if (ending.kind === 'leave') return `${closed}\n\n${ending.prompt}`
+    return ending.text === '' ? closed : `${closed} ${ending.text}`
+  }
   if (answer === GATE.stop) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
   return `Approved: "${workflow.slug}" is now in its ${target} phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`
 }
@@ -273,9 +286,9 @@ async function handoffTool($: EngineInterface, input: Record<string, unknown>): 
   }
 }
 
-async function advanceTool($: EngineInterface, input: Record<string, unknown>): Promise<ToolAnswer> {
+async function advanceTool($: EngineInterface, runtime: Runtime, input: Record<string, unknown>): Promise<ToolAnswer> {
   try {
-    return await answered($, await advance($, await contextOf($), input, await $.clock.now()))
+    return await answered($, await advance($, runtime, await contextOf($), input, await $.clock.now()))
   } catch (error) {
     return failure(error)
   }
@@ -284,6 +297,14 @@ async function advanceTool($: EngineInterface, input: Record<string, unknown>): 
 async function progressTool($: EngineInterface, input: Record<string, unknown>): Promise<ToolAnswer> {
   try {
     return await answered($, await progress($, await contextOf($), input, await $.clock.now()))
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+async function finishTool($: EngineInterface, runtime: Runtime): Promise<ToolAnswer> {
+  try {
+    return await answered($, await finish($, runtime, await contextOf($), await $.clock.now()))
   } catch (error) {
     return failure(error)
   }
@@ -354,7 +375,7 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
     e.agentId === undefined ? handoffTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
   on('tool.call', { tool: 'mcp__workflow__advance' }, ($, e) =>
-    e.agentId === undefined ? advanceTool($, inputOf(e)) : refusedInStepAgent(e.tool),
+    e.agentId === undefined ? advanceTool($, runtime, inputOf(e)) : refusedInStepAgent(e.tool),
   )
   on('tool.call', { tool: 'mcp__workflow__lock' }, $ => lockTool($))
   on('tool.call', { tool: 'mcp__workflow__verify' }, ($, e) => verifyTool($, runtime, e.agentId))
@@ -364,6 +385,16 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
   on('tool.call', { tool: 'mcp__workflow__progress' }, ($, e) =>
     e.agentId === undefined ? progressTool($, inputOf(e)) : refusedInStepAgent(e.tool),
   )
+  on('tool.call', { tool: 'mcp__workflow__finish' }, ($, e) =>
+    e.agentId === undefined ? finishTool($, runtime) : refusedInStepAgent(e.tool),
+  )
+  on('tool.call', { tool: 'EnterWorktree' }, async ($, e, next) => {
+    const entered = await next(e)
+    if (e.agentId === undefined && e.tool === 'EnterWorktree' && entered.deny === undefined && entered.isError !== true && typeof e.path === 'string') {
+      await rememberEnteredWorktree($, e.path)
+    }
+    return entered
+  })
   on('turn.complete', async ($, e, next) => {
     const ended = await next(e)
     if (e.agentId !== undefined) {
