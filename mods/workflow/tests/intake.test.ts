@@ -20,7 +20,7 @@ function withoutConfig(files: Record<string, string>): Record<string, string> {
 describe('the intake gate', () => {
   test('moves to setup when the project has no workflow.json', async ($, on) => {
     const fake = fakeEngine(on, withoutConfig(INTAKE), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: GATE_SUMMARY })
@@ -30,7 +30,7 @@ describe('the intake gate', () => {
 
   test('moves a feature to design when the project has its workflow.json', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: GATE_SUMMARY })
@@ -40,7 +40,7 @@ describe('the intake gate', () => {
 
   test('moves a project to spec when the project has its workflow.json', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ size: 'project', phase: 'intake', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: GATE_SUMMARY })

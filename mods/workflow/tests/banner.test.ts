@@ -251,7 +251,7 @@ describe('the second line of the band', () => {
 
   test('says waiting for you while the Models panel is open', async ($, on) => {
     const fake = fakeEngine(on, repo({ phase: 'intake', slice: '0' }), 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.perStep)
+    fake.answers.push(GATE.continue, MODELS.perStep)
     await start($)
     await submitPrompt($)
 

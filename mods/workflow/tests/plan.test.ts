@@ -146,6 +146,15 @@ describe('recommendations', () => {
     expect(errorsOf([{ step: 'build', model: 7, effort: 'high' }])).not.toBe('')
   })
 
+  test('refuse a second recommendation for the same step, naming the entry', () => {
+    const errors = errorsOf([
+      { step: 'build', model: 'sonnet', effort: 'high' },
+      { step: 'build', model: 'opus', effort: 'medium' },
+    ])
+
+    expect(errors).toBe('"build opus medium": build has two recommendations')
+  })
+
   test('refuse the whole list when one entry is wrong', () => {
     const parsed = parseRecommendations(
       [{ step: 'build', model: 'sonnet', effort: 'high' }, { step: 'review', model: 'opus', effort: 'max' }],

@@ -42,7 +42,7 @@ function optionsOf(found: { props: Record<string, unknown> } | undefined): Optio
 }
 
 async function choosingAtIntake($: Engine, fake: Fake): Promise<void> {
-  fake.answers.push(GATE.approve, MODELS.perStep)
+  fake.answers.push(GATE.continue, MODELS.perStep)
   await start($)
   await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.', recommendations: RECOMMENDATIONS })
 }

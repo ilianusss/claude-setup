@@ -88,7 +88,7 @@ describe('gates', () => {
 
   test('advance asks the person and moves the phase on approval', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B: sessions in Redis.' })
@@ -100,7 +100,7 @@ describe('gates', () => {
 
   test('Continue registers the agents, ends the turn and submits the next phase prompt in a turn of its own', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
     const registeredBefore = fake.agents.length
 
@@ -120,7 +120,7 @@ describe('gates', () => {
 
   test('Continue into build submits the build prompt for the first slice not done', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'slice', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two slices.' })
@@ -133,7 +133,7 @@ describe('gates', () => {
 
   test('Continue out of the last phase closes the workflow', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'inspect' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Pull request opened.' })
@@ -191,7 +191,7 @@ describe('gates', () => {
 
   test('advance from a step agent is refused without asking', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.', agentId: 'a1' })
@@ -203,7 +203,7 @@ describe('gates', () => {
 
   test('advance into build starts at the first slice not done', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'slice', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two slices.' })

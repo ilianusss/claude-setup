@@ -186,7 +186,7 @@ describe('leaving inspect', () => {
   test('resets the review round', async ($, on) => {
     agentsAndTranscript(on)
     const fake = fakeEngine(on, inspectRepo({ size: 'project', review_round: '3' }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Pull request drafted.' })

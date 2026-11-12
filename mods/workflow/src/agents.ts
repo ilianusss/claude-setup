@@ -44,10 +44,6 @@ export function buildAgentSpec(step: Step, choice: ModelChoice, instructions: st
   }
 }
 
-function inRegistrationOrder(steps: readonly Step[]): Step[] {
-  return [...steps.filter(step => step !== 'build'), ...steps.filter(step => step === 'build')]
-}
-
 async function reviewerPrompt($: EngineInterface): Promise<string> {
   const setupRoot = $.plugin.root.split('/').slice(0, -2).join('/')
   try {
@@ -73,7 +69,7 @@ async function registerStep($: EngineInterface, context: Context, workflow: Work
 // spawns them to a turn of its own.
 export async function registerAgentsFor($: EngineInterface, context: Context, workflow: Workflow): Promise<void> {
   try {
-    for (const step of inRegistrationOrder(stepsOf(workflow, context.config === undefined))) {
+    for (const step of stepsOf(workflow, context.config === undefined)) {
       await registerStep($, context, workflow, step)
     }
   } catch (error) {

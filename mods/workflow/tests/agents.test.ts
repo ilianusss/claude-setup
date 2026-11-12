@@ -1,3 +1,4 @@
+import type { AgentSpec } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
@@ -13,6 +14,10 @@ const CHECKS = [RED, 'pnpm lint', 'pnpm tsc --noEmit', 'pnpm test']
 
 function lastSection(prompt: string): string {
   return prompt.split('\n## ').at(-1) ?? ''
+}
+
+function buildSpec(fake: Fake): AgentSpec | undefined {
+  return fake.agents.filter(spec => spec.name === 'build').at(-1)
 }
 
 async function bash($: Engine, fake: Fake, command: string, exitCode: number): Promise<void> {
@@ -48,7 +53,7 @@ describe('registering workflow:build', () => {
 
     await start($)
 
-    expect(fake.agents.at(-1)).toMatchObject({ name: 'build', model: 'opus', effort: 'medium' })
+    expect(buildSpec(fake)).toMatchObject({ name: 'build', model: 'opus', effort: 'medium' })
   })
 
   test('the model plan of the state file sets its model and effort', async ($, on) => {
@@ -56,7 +61,7 @@ describe('registering workflow:build', () => {
 
     await start($)
 
-    expect(fake.agents.at(-1)).toMatchObject({ name: 'build', model: 'haiku', effort: 'low' })
+    expect(buildSpec(fake)).toMatchObject({ name: 'build', model: 'haiku', effort: 'low' })
   })
 
   test('it cannot move the workflow or ask the user', async ($, on) => {
@@ -64,7 +69,7 @@ describe('registering workflow:build', () => {
 
     await start($)
 
-    expect(fake.agents.at(-1)?.disallowedTools).toEqual(expect.arrayContaining(WITHHELD))
+    expect(buildSpec(fake)?.disallowedTools).toEqual(expect.arrayContaining(WITHHELD))
   })
 
   test('its prompt holds the Agent section of the build phase and not the part for the conversation', async ($, on) => {
@@ -72,7 +77,7 @@ describe('registering workflow:build', () => {
 
     await start($)
 
-    const prompt = fake.agents.at(-1)?.prompt ?? ''
+    const prompt = buildSpec(fake)?.prompt ?? ''
     expect(prompt).toContain('Do the build work.')
     expect(prompt).not.toContain('Talk the user through the slice.')
     expect(lastSection(prompt).startsWith('Report')).toBe(true)
@@ -83,7 +88,7 @@ describe('registering workflow:build', () => {
 
     await start($)
 
-    const prompt = fake.agents.at(-1)?.prompt ?? ''
+    const prompt = buildSpec(fake)?.prompt ?? ''
     expect(prompt).toContain('Slice 1: Walking skeleton')
     expect(prompt).toContain('Form and route.')
     expect(prompt).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
@@ -107,13 +112,13 @@ describe('registering workflow:build', () => {
 
   test('approving the slice phase registers it for the first slice', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'slice', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two slices.' })
 
-    expect(fake.agents.at(-1)?.name).toBe('build')
-    expect(fake.agents.at(-1)?.prompt).toContain('Slice 1: Walking skeleton')
+    expect(buildSpec(fake)?.name).toBe('build')
+    expect(buildSpec(fake)?.prompt).toContain('Slice 1: Walking skeleton')
   })
 
   test('switching to the workflow branch with /workflow continue registers it', async ($, on) => {
@@ -124,7 +129,7 @@ describe('registering workflow:build', () => {
     await run($, 'continue login')
     await fake.clock.settle()
 
-    expect(fake.agents.at(-1)).toMatchObject({ name: 'build', model: 'opus', effort: 'medium' })
+    expect(buildSpec(fake)).toMatchObject({ name: 'build', model: 'opus', effort: 'medium' })
   })
 
   test('a verified slice registers it again for the next slice', async ($, on) => {
@@ -136,7 +141,7 @@ describe('registering workflow:build', () => {
 
     await $.tool.call({ tool: 'mcp__workflow__verify' })
 
-    expect(fake.agents.at(-1)?.prompt).toContain('Slice 2: Password check')
+    expect(buildSpec(fake)?.prompt).toContain('Slice 2: Password check')
   })
 })
 

@@ -188,11 +188,6 @@ export function inPhase(workflow: Workflow, phase: Phase): Workflow {
   return { ...workflow, phase, step: undefined, reviewRound: undefined }
 }
 
-// The first phase of the work itself: every workflow starts with the intake, which leads here.
-export function firstPhase(size: Size, needsSetup: boolean): Phase {
-  return phaseAfter(size, 'intake', needsSetup)
-}
-
 export function slugify(title: string): string {
   return title
     .normalize('NFKD')

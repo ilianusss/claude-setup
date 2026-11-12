@@ -219,11 +219,11 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   const answer = await askOrUndefined(
     $,
     `Approve the ${workflow.phase} phase of "${workflow.slug}" and move to ${target}?\n\n${summary}`,
-    [GATE.approve, GATE.stop, GATE.wait],
+    [GATE.continue, GATE.stop, GATE.wait],
     'Gate',
   )
   if (answer === undefined) return `The user closed the dialog: "${workflow.slug}" stays in its ${workflow.phase} phase.`
-  if (answer !== GATE.approve && answer !== GATE.stop) {
+  if (answer !== GATE.continue && answer !== GATE.stop) {
     return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
   }
 

@@ -46,7 +46,7 @@ describe('the model question at the intake gate', () => {
   test('follows Continue with the defaults, the recommendations or a choice per step', async ($, on) => {
     const offered = recordOptions(on)
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.defaults)
+    fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -58,7 +58,7 @@ describe('the model question at the intake gate', () => {
   test('leaves out the recommendations when Claude gave none', async ($, on) => {
     const offered = recordOptions(on)
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.defaults)
+    fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
@@ -97,7 +97,7 @@ describe('the model question at the intake gate', () => {
 
   test('is not asked at the gate of another phase', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
@@ -107,7 +107,7 @@ describe('the model question at the intake gate', () => {
 
   test('Use the defaults saves the default plan and goes on with the next phase', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0', models: '[build haiku low]' }) }), 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.defaults)
+    fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -122,7 +122,7 @@ describe('the model question at the intake gate', () => {
 
   test("Use Claude's recommendations saves them over the defaults, logs it and registers the agents on them", async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.recommended)
+    fake.answers.push(GATE.continue, MODELS.recommended)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -138,7 +138,7 @@ describe('the model question at the intake gate', () => {
 
   test('a dismissed model question keeps the plan and goes on with the next phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -165,7 +165,7 @@ describe('the model question at the intake gate', () => {
 describe('recommendations the gate refuses', () => {
   test('outside the intake gate are refused before any dialog, and nothing moves', async ($, on) => {
     const fake = fakeEngine(on, DESIGN, 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
     const before = fake.files.get(STATE_FILE)
 
@@ -187,7 +187,7 @@ describe('recommendations the gate refuses', () => {
   for (const [name, recommendations, entry] of refused) {
     test(`naming ${name} are refused with the entry named, before any dialog, and nothing moves`, async ($, on) => {
       const fake = fakeEngine(on, INTAKE, 'feat/login')
-      fake.answers.push(GATE.approve, MODELS.recommended)
+      fake.answers.push(GATE.continue, MODELS.recommended)
       await start($)
       const before = fake.files.get(STATE_FILE)
 
@@ -201,7 +201,7 @@ describe('recommendations the gate refuses', () => {
 
   test('that are not a list of entries are refused, and nothing moves', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.recommended)
+    fake.answers.push(GATE.continue, MODELS.recommended)
     await start($)
     const before = fake.files.get(STATE_FILE)
 
@@ -218,7 +218,7 @@ describe('the choice per step when the panel cannot be shown', () => {
   test('asks one dialog per step of this workflow, in pipeline order, and closes the undrawn panel', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, ...ALL_RECOMMENDED)
+    fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -233,7 +233,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     const offered = recordOptions(on)
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, ...ALL_RECOMMENDED)
+    fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -247,7 +247,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     const offered = recordOptions(on)
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, ...ALL_RECOMMENDED)
+    fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -258,7 +258,7 @@ describe('the choice per step when the panel cannot be shown', () => {
   test('saves the answers, logs the change, registers the agents and goes on with the next phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, ...ALL_RECOMMENDED)
+    fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -274,7 +274,7 @@ describe('the choice per step when the panel cannot be shown', () => {
   test('takes a model and effort typed under Other', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, 'Haiku  Low', 'opus high (Recommended)', 'opus high (Recommended)', 'sonnet low', 'opus high')
+    fake.answers.push(GATE.continue, MODELS.perStep, 'Haiku  Low', 'opus high (Recommended)', 'opus high (Recommended)', 'sonnet low', 'opus high')
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
@@ -285,7 +285,7 @@ describe('the choice per step when the panel cannot be shown', () => {
   test('asks again when the text typed under Other names Fable, max or nothing it knows', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, 'fable high', 'opus max', 'gpt-5 high', 'haiku low', 'opus high', 'opus high', 'opus medium', 'opus high')
+    fake.answers.push(GATE.continue, MODELS.perStep, 'fable high', 'opus max', 'gpt-5 high', 'haiku low', 'opus high', 'opus high', 'opus medium', 'opus high')
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
@@ -298,7 +298,7 @@ describe('the choice per step when the panel cannot be shown', () => {
   test('a dismissed dialog keeps the whole plan and goes on with the next phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.isPlaced = false
-    fake.answers.push(GATE.approve, MODELS.perStep, 'haiku low', 'sonnet high')
+    fake.answers.push(GATE.continue, MODELS.perStep, 'haiku low', 'sonnet high')
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
@@ -314,7 +314,7 @@ describe('the choice per step when the panel cannot be shown', () => {
 describe('the choice per step in the panel', () => {
   test('opens the panel as a focused dialog and waits for the user before the next phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
-    fake.answers.push(GATE.approve, MODELS.perStep)
+    fake.answers.push(GATE.continue, MODELS.perStep)
     await start($)
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })

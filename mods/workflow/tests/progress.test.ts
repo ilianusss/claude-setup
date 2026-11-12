@@ -172,7 +172,7 @@ describe('the saved sub-step', () => {
 
   test('is cleared when the phase changes', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0', step: '4' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.' })

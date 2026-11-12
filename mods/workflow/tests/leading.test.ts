@@ -38,7 +38,7 @@ describe('the phase start line', () => {
   test('names the phase that starts after Continue and what it produces', async ($, on) => {
     const logged = recordLog(on)
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'design', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { DEFAULT_PLAN } from '../src/plan'
-import { firstPhase, parseWorkflow, phaseAfter, renderWorkflow, slugify, withLog } from '../src/state'
+import { parseWorkflow, phaseAfter, renderWorkflow, slugify, withLog } from '../src/state'
 import type { Workflow } from '../src/state'
 import { stateText } from './engine'
 
@@ -88,13 +88,6 @@ describe('phases', () => {
     expect(phaseAfter('project', 'spec')).toBe('design')
     expect(phaseAfter('project', 'inspect')).toBe('retro')
     expect(phaseAfter('project', 'retro')).toBe('done')
-  })
-
-  test('setup comes first only when the project has no workflow.json', () => {
-    expect(firstPhase('feature', true)).toBe('setup')
-    expect(firstPhase('feature', false)).toBe('design')
-    expect(firstPhase('project', false)).toBe('spec')
-    expect(phaseAfter('project', 'setup')).toBe('spec')
   })
 
   test('setup comes right after the intake only when the project has no workflow.json', () => {

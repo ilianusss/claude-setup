@@ -126,7 +126,7 @@ function leaveWorktree(fake: Fake, where: Where): void {
 describe('the ending dialog (AC1)', () => {
   test('approving the last gate with a clean, pushed worktree asks whether to remove the worktree and the branch, naming both', async ($, on) => {
     const { fake } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.keep)
+    fake.answers.push(GATE.continue, ENDING.keep)
 
     await approveLastGate($)
 
@@ -138,7 +138,7 @@ describe('the ending dialog (AC1)', () => {
   test('a worktree holding ignored files names its top-level entries in the question, five at most, then a count', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     where.ignored = '!! .env\n!! node_modules/\n!! dist/\n!! src/generated/\n!! src/cache.log\n!! coverage/\n!! .cache/\n!! tmp/\n'
-    fake.answers.push(GATE.approve, ENDING.keep)
+    fake.answers.push(GATE.continue, ENDING.keep)
 
     await approveLastGate($)
 
@@ -154,7 +154,7 @@ describe('the ending dialog (AC1)', () => {
   test('a worktree without ignored entries gets the plain question', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     where.ignored = ''
-    fake.answers.push(GATE.approve, ENDING.keep)
+    fake.answers.push(GATE.continue, ENDING.keep)
 
     await approveLastGate($)
 
@@ -164,7 +164,7 @@ describe('the ending dialog (AC1)', () => {
 
   test('a project is asked at the retro gate', async ($, on) => {
     const { fake } = await inWorktree($, on, repo({ size: 'project', phase: 'retro' }))
-    fake.answers.push(GATE.approve, ENDING.keep)
+    fake.answers.push(GATE.continue, ENDING.keep)
 
     await approveLastGate($)
 
@@ -173,7 +173,7 @@ describe('the ending dialog (AC1)', () => {
 
   test("a project's inspect gate leads to the retro without the ending", async ($, on) => {
     const { fake } = await inWorktree($, on, repo({ size: 'project' }))
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     await approveLastGate($)
 
@@ -184,7 +184,7 @@ describe('the ending dialog (AC1)', () => {
   test('a workflow that ran in the main checkout is not offered any removal', async ($, on) => {
     const fake = fakeEngine(on, repo({ worktree: ROOT }), BRANCH)
     pushed(fake)
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await start($)
 
     await approveLastGate($)
@@ -198,7 +198,7 @@ describe('the ending dialog (AC1)', () => {
     fake.unpushed = ''
     fake.refs.set('main', 'c1')
     fake.refs.set('main@{u}', 'c1')
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await start($)
     await enterWorktree($)
 
@@ -214,7 +214,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
   test('an uncommitted change keeps both and says so', async ($, on) => {
     const { fake } = await inWorktree($, on)
     fake.porcelain = '?? notes.txt\n'
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     const ran = await approveLastGate($)
 
@@ -227,7 +227,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
   test('a branch with no upstream keeps both and says so', async ($, on) => {
     const { fake } = await inWorktree($, on)
     fake.unpushed = undefined
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     const ran = await approveLastGate($)
 
@@ -239,7 +239,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
   test('commits not pushed keep both and say so', async ($, on) => {
     const { fake } = await inWorktree($, on)
     fake.unpushed = 'c2\n'
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     const ran = await approveLastGate($)
 
@@ -251,7 +251,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
   test('the workflow is still closed when the worktree is kept', async ($, on) => {
     const { fake } = await inWorktree($, on)
     fake.porcelain = ' M src/login.ts\n'
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     await approveLastGate($)
 
@@ -260,7 +260,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
 
   test('answering Keep them removes nothing and names /workflow done', async ($, on) => {
     const { fake } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.keep)
+    fake.answers.push(GATE.continue, ENDING.keep)
 
     const ran = await approveLastGate($)
 
@@ -270,7 +270,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
 
   test('a dismissed ending dialog removes nothing', async ($, on) => {
     const { fake } = await inWorktree($, on)
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
 
     await approveLastGate($)
 
@@ -280,7 +280,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
   test('/workflow done offers the removal again once the worktree is clean', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     fake.porcelain = '?? notes.txt\n'
-    fake.answers.push(GATE.approve)
+    fake.answers.push(GATE.continue)
     await approveLastGate($)
     fake.porcelain = ''
     leaveWorktree(fake, where)
@@ -308,7 +308,7 @@ describe('keeping the worktree when a check fails (AC2)', () => {
 describe('removing the worktree and the branch (AC3)', () => {
   test('on yes inside the worktree it entered, the conversation is told to leave it with keep, then call finish', async ($, on) => {
     const { fake } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
 
     const ran = await approveLastGate($)
 
@@ -321,7 +321,7 @@ describe('removing the worktree and the branch (AC3)', () => {
 
   test('finish removes the worktree from the main checkout without forcing, then deletes the branch', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -336,7 +336,7 @@ describe('removing the worktree and the branch (AC3)', () => {
 
   test('finish logs the removal and the workflow stays listed as done', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -352,7 +352,7 @@ describe('removing the worktree and the branch (AC3)', () => {
   test('finish keeps a branch that is behind its upstream', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     branchAt(fake, 'c0')
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -365,7 +365,7 @@ describe('removing the worktree and the branch (AC3)', () => {
   test('when git refuses to remove the worktree, the branch is kept and nothing is logged', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     fake.worktreeRemoveExit = 1
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -405,7 +405,7 @@ describe('removing the worktree and the branch (AC3)', () => {
   test('a session that started inside the worktree is told to run /workflow done from the main checkout', async ($, on) => {
     const { fake } = fakeIn(on, repo(), BRANCH, WORKTREE)
     pushed(fake)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await start($)
 
     const ran = await approveLastGate($)
@@ -420,7 +420,7 @@ describe('removing the worktree and the branch (AC3)', () => {
 describe('mcp__workflow__finish is refused (AC4)', () => {
   test('while the session is inside the worktree', async ($, on) => {
     const { fake } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
 
     const ran = await finish($)
@@ -431,7 +431,7 @@ describe('mcp__workflow__finish is refused (AC4)', () => {
 
   test('and goes through once the session has left the worktree', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     await finish($)
     leaveWorktree(fake, where)
@@ -443,7 +443,7 @@ describe('mcp__workflow__finish is refused (AC4)', () => {
 
   test('from a step agent', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -474,7 +474,7 @@ describe('mcp__workflow__finish is refused (AC4)', () => {
 describe('checking again at removal time (AC5)', () => {
   test('a change made between the dialog and finish removes nothing', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     fake.porcelain = '?? late.txt\n'
@@ -487,7 +487,7 @@ describe('checking again at removal time (AC5)', () => {
 
   test('a commit made between the dialog and finish, leaving the branch ahead of its upstream, removes nothing', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     fake.unpushed = 'c2\n'
@@ -518,7 +518,7 @@ describe('checking again at removal time (AC5)', () => {
   test('an ignored entry that appeared between the dialog and finish removes nothing, and is named', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     where.ignored = '!! .env\n'
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     where.ignored = '!! .env\n!! secrets.txt\n'
@@ -548,7 +548,7 @@ describe('checking again at removal time (AC5)', () => {
   test('the ignored entries the dialog named do not stop the removal', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
     where.ignored = '!! .env\n!! node_modules/\n'
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
 
@@ -559,7 +559,7 @@ describe('checking again at removal time (AC5)', () => {
 
   test("finish keeps the branch when a tag of its name points at its upstream's commit and the branch does not", async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     fake.refs.set(BRANCH, 'c1')
@@ -590,7 +590,7 @@ describe('where the session is, as git resolves it', () => {
 
   test('finish from a folder git resolves to the worktree, under another path, is refused', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     where.toplevels.set(LINK, WORKTREE)
     where.cwd = LINK
@@ -603,7 +603,7 @@ describe('where the session is, as git resolves it', () => {
 
   test('finish from a repository nested in the worktree is refused', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     where.toplevels.set(`${WORKTREE}/vendor/lib`, `${WORKTREE}/vendor/lib`)
@@ -633,7 +633,7 @@ describe('where the session is, as git resolves it', () => {
 
   test('finish removes nothing when git cannot resolve the session folder', async ($, on) => {
     const { fake, where } = await inWorktree($, on)
-    fake.answers.push(GATE.approve, ENDING.remove)
+    fake.answers.push(GATE.continue, ENDING.remove)
     await approveLastGate($)
     leaveWorktree(fake, where)
     where.toplevels.set(ROOT, null)

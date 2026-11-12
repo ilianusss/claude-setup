@@ -361,7 +361,7 @@ describe('Stop here at a gate', () => {
 
   test('Continue at the next gate makes the workflow active again, so a write outside the phase is refused', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ size: 'project', phase: 'spec', slice: '0' }) }), 'feat/login')
-    fake.answers.push(GATE.stop, GATE.approve)
+    fake.answers.push(GATE.stop, GATE.continue)
     await start($)
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Spec written.' })
 

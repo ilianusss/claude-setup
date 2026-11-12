@@ -51,7 +51,7 @@ export const PICKER = {
   dialogDefault: '(default)',
 }
 
-export const GATE = { approve: 'Continue', stop: 'Stop here', wait: 'Not yet' }
+export const GATE = { continue: 'Continue', stop: 'Stop here', wait: 'Not yet' }
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }

@@ -81,7 +81,7 @@ function oneLine(text: string): string {
   return line.length > REASON_LENGTH ? `${line.slice(0, REASON_LENGTH - 3)}...` : line
 }
 
-function parseRecommendation(entry: unknown, steps: readonly Step[], seen: Set<Step>): Recommendation | string {
+function parseRecommendation(entry: unknown, steps: readonly Step[]): Recommendation | string {
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return `${JSON.stringify(entry)} is not a { step, model, effort, reason } entry`
   const record = entry as Record<string, unknown>
   const named = `"${field(record, 'step')} ${field(record, 'model')} ${field(record, 'effort')}"`
@@ -93,15 +93,20 @@ function parseRecommendation(entry: unknown, steps: readonly Step[], seen: Set<S
   if (model === undefined) return `${named}: the model must be ${MODELS.join(', ')}`
   if (effort === undefined) return `${named}: the effort must be ${EFFORTS.join(', ')}`
   if (effort === 'xhigh' && reason.length === 0) return `${named}: xhigh needs a reason`
-  if (seen.has(step)) return `${named}: ${step} has two recommendations`
-  seen.add(step)
   return { step, model, effort, reason }
+}
+
+function refuseRepeats(parsed: ReadonlyArray<Recommendation | string>): Array<Recommendation | string> {
+  return parsed.map((entry, index) => {
+    if (typeof entry === 'string') return entry
+    const isRepeat = parsed.slice(0, index).some(earlier => typeof earlier !== 'string' && earlier.step === entry.step)
+    return isRepeat ? `"${entry.step} ${entry.model} ${entry.effort}": ${entry.step} has two recommendations` : entry
+  })
 }
 
 export function parseRecommendations(input: unknown, steps: readonly Step[]): { recommendations: Recommendation[] } | { errors: string[] } {
   if (!Array.isArray(input)) return { errors: ['recommendations must be a list of { step, model, effort, reason } entries'] }
-  const seen = new Set<Step>()
-  const parsed = input.map(entry => parseRecommendation(entry, steps, seen))
+  const parsed = refuseRepeats(input.map(entry => parseRecommendation(entry, steps)))
   const errors = parsed.filter((entry): entry is string => typeof entry === 'string')
   return errors.length > 0 ? { errors } : { recommendations: parsed.filter((entry): entry is Recommendation => typeof entry !== 'string') }
 }

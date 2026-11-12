@@ -236,7 +236,7 @@ export function verifiedForAgent(verified: Verified): string {
   ].join('\n')
 }
 
-async function withStatus($: EngineInterface, context: Context, workflow: Workflow, status: 'active' | 'paused'): Promise<void> {
+async function saveStatus($: EngineInterface, context: Context, workflow: Workflow, status: 'active' | 'paused'): Promise<void> {
   if (workflow.status === status) return
   const now = await $.clock.now()
   await saveWorkflow($, context.repo, context.paths, withLog({ ...workflow, status, updated: iso(now) }, day(now), status === 'active' ? 'resumed' : 'paused'))
@@ -246,22 +246,22 @@ export type NextStep = { kind: 'go' | 'stop'; text: string }
 
 export async function nextStep($: EngineInterface, context: Context, advanced: Workflow): Promise<NextStep> {
   if (advanced.phase === 'inspect') {
-    await withStatus($, context, advanced, 'active')
+    await saveStatus($, context, advanced, 'active')
     return {
       kind: 'go',
       text: `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`,
     }
   }
   if (advanced.autoNext) {
-    await withStatus($, context, advanced, 'active')
+    await saveStatus($, context, advanced, 'active')
     return { kind: 'go', text: `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}` }
   }
   const answer = await askOrUndefined($, NEXT_SLICE.question(advanced.slug, advanced.slice - 1), [NEXT_SLICE.start(advanced.slice), NEXT_SLICE.stop], 'Next slice')
   if (answer === NEXT_SLICE.start(advanced.slice)) {
-    await withStatus($, context, advanced, 'active')
+    await saveStatus($, context, advanced, 'active')
     return { kind: 'go', text: `The user starts slice ${advanced.slice} now. Call mcp__workflow__handoff with where things stand, then: ${spawnBuild(advanced)}` }
   }
-  await withStatus($, context, advanced, 'paused')
+  await saveStatus($, context, advanced, 'paused')
   return { kind: 'stop', text: `The user stops here; slice ${advanced.slice} is next. ${stopPrompt(advanced)}` }
 }
 
