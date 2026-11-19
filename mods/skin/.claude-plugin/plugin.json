@@ -1,0 +1,7 @@
+{
+  "name": "skin",
+  "version": "1.1.0",
+  "description": "Redraws the transcript in the colours of the ~/.theme palette: tool rows that open onto their input and answer, highlighted code, diff, table, math, Mermaid and shell cards, links, folding, a usage band and a calm mode. /skin swaps palettes and parts live.",
+  "author": { "name": "ilianusss" },
+  "types": "./types/index.d.ts"
+}

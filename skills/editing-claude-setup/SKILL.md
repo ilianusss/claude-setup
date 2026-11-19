@@ -5,7 +5,7 @@ description: Changing this Claude Code setup in ~/.claude - where a new instruct
 
 # Editing the Claude Code setup
 
-`~/.claude` is a git repo (`ilianusss/.claude`) holding both mods, `mods/warden` and `mods/workflow`. `docs/architecture.md` explains how the pieces fit; read it before a structural change.
+`~/.claude` is a git repo (`ilianusss/.claude`) holding the mods in `mods/` (`warden`, `workflow`, `scribe`, `shush`, `skin`). Before editing `mods/skin`, read its `docs/architecture.md`: the engine enforces rules on where `$` and atoms may go. `docs/architecture.md` explains how the pieces fit; read it before a structural change.
 
 ## Where an instruction goes
 

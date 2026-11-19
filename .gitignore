@@ -23,3 +23,6 @@
 
 # Written by claude plugin eval
 /mods/*/evals/results/
+
+# Build dependencies of a vendored bundle (mods/skin/scripts/vendor)
+/mods/*/scripts/vendor/node_modules/
