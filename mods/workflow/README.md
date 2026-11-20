@@ -13,7 +13,7 @@ It is one of the two mods of the `~/.claude` setup, next to `warden`, loaded thr
 
 ## Getting started
 
-In a repo, type `/workflow new <title>`. A project without `.claude/workflow.json` starts with the setup phase, which writes it.
+In a repo, type `/workflow new <title>`. Every workflow starts with an intake, where Claude asks what you want; a project without `.claude/workflow.json` then goes through the setup phase, which writes it.
 
 ## Commands
 
@@ -21,22 +21,33 @@ In a repo, type `/workflow new <title>`. A project without `.claude/workflow.jso
 | --- | --- |
 | `/workflow` | The workflows of this repo |
 | `/workflow all` | Open workflows in every repo |
-| `/workflow new <title>` | Start one: size, commits and branch are asked in a dialog |
-| `/workflow continue [slug]` | Resume one, with a drift check after a long break |
-| `/workflow next` | Clear the context and continue: the command between slices |
+| `/workflow new <title>` | Start one: size, commits, slice chaining and branch are asked in a dialog, then Claude moves into the new worktree and starts the intake. Without a title, the prompt box gets `/workflow new ` |
+| `/workflow continue [slug]` | Resume one where it stopped, with a drift check after a long break |
+| `/workflow next` | Clear the context and continue, when resuming by hand: gates and slices go on by themselves |
 | `/workflow pause` | Write the handoff and stop |
+| `/workflow models` | Choose each step's model and effort in the Models panel (one dialog per step where the panel cannot be shown) |
 | `/workflow unlock <file> <reason>` | Unlock a locked test yourself |
-| `/workflow done <slug>`, `/workflow abandon <slug> <reason>` | Close one |
-| `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs |
+| `/workflow done <slug>`, `/workflow abandon <slug> <reason>` | Close one; `done` then offers to remove its worktree and local branch once they are clean and pushed |
+| `/workflow adopt` | Set up a project, or rebuild workflows from their committed specs (a folder without documents starts at the intake) |
 
-The phases, the slice cycle and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
+Your conversation talks to you and an agent the mod registers does each step's work (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, the read-only `review`); the intake and the retro stay in the conversation. After the intake you choose the model and effort the agents run on: the defaults below, Claude's recommendations for this workflow, or a choice per step in the Models panel, which opens on Claude's recommendations; `/workflow models` changes them later, from the current plan. At each gate you answer Continue (the next phase starts right away, in a turn of its own so its agent runs as registered), Stop here (Claude hands off, pauses the workflow and stops) or Not yet; at the intake's gate both Continue and Stop here are followed by the model choice. When a `workflow:build` agent ends after a verified slice, the mod asks you whether to go on, unless slice chaining is on, and hands the conversation the next step. A feature's design opens by offering to map the project into a Context section of `design.md`. The inspect phase reviews and fixes in rounds until no blocker or major finding is left, at most 3 before it asks you, then lets you pick the minor fixes; `workflow:build` fixes test-first without the test lock, and the mod counts the rounds in the state and on the band. When the workflow closes with its worktree clean and its branch pushed, the mod offers to remove both, naming the ignored files that go with the worktree; Claude leaves the worktree with `ExitWorktree` first, and the removal never forces and deletes the branch only when it matches its upstream. A band above the prompt follows along: the steps of this workflow with the current one in colour, then the current sub-step, the model and effort doing it, and "working" or "waiting for you"; the status line says the same in one line (`workflow login: build 2/5, opus medium, waiting for you`). The phases, the band, the slice cycle, the review loop, the ending and the test lock are described in [docs/workflow.md](https://github.com/ilianusss/.claude/blob/main/docs/workflow.md) of the setup repo.
+
+Default plan:
+
+| Step | Model | Effort |
+| --- | --- | --- |
+| map, setup | sonnet | medium |
+| spec, design, slice, review | opus | high |
+| build | opus | medium |
+
+Fable and `max` effort are never offered, and Claude's recommendation of `xhigh` needs a reason.
 
 ## Project structure
 
 ```text
 hooks/        the module Claude Code loads
-src/          commands, tools, guards, state, the test lock
-phases/       what Claude does in each phase, with the files it may write
+src/          commands, tools, guards, state, the test lock, the review rounds, the Models panel, the band, the ending
+phases/       each phase: what the conversation does with you, what its agent does, the files it may write
 guides/       question banks, the decision guide, EARS, the drift check
 templates/    spec, design, slices, ADR, project CLAUDE.md, workflow.json
 tests/        claude plugin test suites, against a fake git and file system

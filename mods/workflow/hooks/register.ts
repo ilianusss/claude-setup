@@ -1,10 +1,11 @@
 import type { Register } from 'claude-code'
 
-import { clearThenSubmit } from '../src/clock'
+import { registerAgents } from '../src/agents'
+import { registerBanner } from '../src/banner'
 import { registerCommand, registerCommands } from '../src/commands'
 import { loadContext } from '../src/context'
 import { registerGuards } from '../src/guards'
-import { phasePrompt } from '../src/prompts'
+import { registerPicker } from '../src/picker'
 import { newRuntime } from '../src/runtime'
 import { announce, refreshStatus } from '../src/status'
 import { registerToolHandlers, registerToolsOnce } from '../src/tools'
@@ -15,6 +16,8 @@ export const register: Register = on => {
   registerCommands(on, runtime)
   registerToolHandlers(on, runtime)
   registerGuards(on)
+  registerPicker(on)
+  registerBanner(on)
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -24,17 +27,7 @@ export const register: Register = on => {
     await registerToolsOnce($, runtime)
     await announce($, context, await $.clock.now())
     await refreshStatus($, context)
+    await registerAgents($, context)
     return started
-  })
-
-  on('turn.complete', async ($, e, next) => {
-    const completed = await next(e)
-    const slug = runtime.pendingNext
-    if (slug === undefined || e.agentId !== undefined || e.reason !== 'answer') return completed
-    runtime.pendingNext = undefined
-    const context = await loadContext($)
-    const workflow = context?.workflows.find(candidate => candidate.slug === slug)
-    if (context !== undefined && workflow !== undefined) clearThenSubmit($, await phasePrompt($, context, workflow))
-    return completed
   })
 }

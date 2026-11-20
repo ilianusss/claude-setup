@@ -65,6 +65,7 @@ Run in M0 with a probe mod and headless sessions; they shaped the design.
 - **A tool a mod answers itself skips the permission step.** Approvals go through `$.ui.ask`.
 - **A mod cannot run a command from inside its own command hook**: it answers first, then runs it from a timer.
 - **Rewritten replies are stored and shown rewritten**, with no flash while streaming.
+- **A mod's guards see a subagent's tool calls.** Measured on 2026-11-11 with a headless run in a scratch repo: an agent the workflow mod registered (`workflow:build`) ran the red command, locked the slice through `mcp__workflow__lock`, and its Edit to the locked test and Write to the state folder were refused, exactly as in the conversation. The agent ran on the model of its spec (haiku under a sonnet session), and the tools in its `disallowedTools` were absent from its tool list.
 
 ## The mods
 
@@ -82,10 +83,14 @@ All four are TypeScript modules for the Claude Code mod API (early access: it ma
 - the `/workflow` command, whose bookkeeping (status, lists, closing) costs no model turn;
 - `/workflow new` creates a worktree `<repo>-<slug>` on `feat/<slug>` next to the repo, except in a linked worktree that runs no workflow yet, where it asks for the branch;
 - the state in `<git common dir>/claude-workflow/`, uncommitted, shared by every worktree, written only by the mod;
-- five tools for Claude (`handoff`, `advance`, `lock`, `verify`, `unlock`), registered only in repos with a workflow;
+- seven tools for Claude (`handoff`, `advance`, `lock`, `verify`, `unlock`, `progress`, `finish`), registered only in repos with a workflow;
 - the test lock: a slice's tests are locked once the mod saw the exact test command fail on the current code, and the slice closes once it saw every check pass on the current code. The mod never runs project code: it watches the commands Claude runs through Bash;
-- guards: locked tests refused to Edit and restored after a shell change, each phase limited to the files it may write;
-- prompts composed per step: the phase file, the state, and for a build the slice with the design sections it names.
+- guards: locked tests refused to Edit and restored after a shell change, each phase limited to the files it may write, `ExitWorktree` with `action: "remove"` refused inside the worktree of an open or done workflow, or when the worktree the session entered is one, and when git cannot resolve either repository (a shell command that deletes a worktree is the permission system's to govern);
+- prompts composed per step: for the conversation, the phase file without its agent sections, the agent to spawn with its model and effort, and the state; for the build agent, the slice with the design sections it names and the checks;
+- the model plan: one model and effort per step in the state file, the default plan when it is missing, and the step's default for any entry naming Fable, `max` or an unknown value;
+- one agent per step of the workflow's size (`workflow:map`, `setup`, `spec`, `design`, `slice`, `build`, `review`), registered with `$.agent.register` for the workflow on the current branch at `session.start`, which a reload of the mod runs again (and for a new workflow at `/workflow new`), each on its plan model and effort, with the `## Agent` section of its phase file (the map's is the `## Map agent` section of `phases/design.md`) and the shared worker rules as its prompt, and `advance`, `handoff`, `unlock` and `AskUserQuestion` withheld. `workflow:review` is limited to `Read`, `Grep`, `Glob` and `Bash`, and its prompt starts with `agents/reviewer.md`, found two folders above the mod, or a short built-in reviewer prompt when that file is missing. The Agent tool spawns a registered agent as registered only from the next turn on, so a gate, a plan change or a verified slice that registers them again ends the turn and hands the next phase or slice to the conversation with a submitted prompt. The conversation keeps the `## With the user` section: it asks the questions, spawns the agent and relays its report;
+- the hand-over after a slice: `mcp__workflow__verify` called from an agent records that agent in `$.state`, which a reload of the mod keeps, and answers it "finish your report"; when that agent's `turn.complete` arrives, the mod asks the next-slice dialog in the conversation's context (unless `auto_next`) and submits the next step to the conversation, which reads it once idle;
+- the ending, when a workflow closes: with the worktree clean (`git status --porcelain`) and the branch pushed (`git rev-list @{u}..HEAD` empty), a dialog naming the worktree, the branch and its ignored files offers to remove them. The mod remembers in `$.state` the worktree the conversation entered with `EnterWorktree`, since `$.session.root()` also follows a worktree move; whether the session is inside the worktree comes from the top level git resolves for its folder, never from the folder's path. A session in it is told to leave with `ExitWorktree` (`keep`) and call `finish`, which is refused inside the worktree, from an agent and without the yes kept in the mod's memory, checks again (an ignored entry the dialog did not name included), then runs `git worktree remove` without `--force` from the main checkout and `git branch -D` only when `refs/heads/<branch>` points at its upstream's commit.
 
 **scribe** fixes each prompt before Claude reads it:
 
@@ -109,8 +114,7 @@ The phase files, guides and templates are markdown inside the workflow mod. If t
 
 What costs on a subscription: every turn resends the whole context; every agent is a cold start; verbose command output (reduced by `rtk`); high effort. Hence:
 
-- no agents inside the slice cycle, one reviewer per feature;
-- one slice per session, with `/workflow next` clearing the context;
+- one agent run per step, and one `workflow:build` run per slice, so each slice starts from a fresh context while the conversation chains the slices without clearing; the agents' prompts name the exact documents to read, to keep each cold start short;
 - the mod's bookkeeping and status line cost nothing;
 - nothing workflow-related is loaded in a repo without a workflow;
 - spec, design, slice and inspect are reasoning-heavy (Opus, high effort); the build is well specified by then (Sonnet, or Opus at medium effort);

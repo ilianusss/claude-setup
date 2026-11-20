@@ -1,20 +1,24 @@
 import type { EngineInterface, On, PromptOrigin } from 'claude-code'
 
+import { registerAgents, registerAgentsFor } from './agents'
 import { ask, askOrUndefined } from './ask'
 import { unlockFile } from './build'
 import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
-import { ADOPT, BRANCH, COMMITS, RETRO, SIZE, SWITCH } from './labels'
-import { pausePrompt, phasePrompt, setupPrompt } from './prompts'
+import { offerEnding } from './ending'
+import { ADOPT, BRANCH, CHAINING, COMMITS, RETRO, SIZE, SWITCH } from './labels'
+import { chooseModels, recommendationsFor } from './picker'
+import { DEFAULT_PLAN, renderPlan } from './plan'
+import { enterWorktreePrompt, pausePrompt, phasePrompt, setupPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
 import type { Runtime } from './runtime'
 import { parseSlices } from './slices'
-import { firstPhase, slugify, withLog } from './state'
+import { inPhase, slugify, withLog } from './state'
 import type { Phase, Size, Workflow } from './state'
-import { phaseLabel, refreshStatus } from './status'
+import { announcePhase, phaseLabel, refreshStatus } from './status'
 import { openWorkflowsEverywhere, saveWorkflow } from './store'
 import { registerToolsOnce } from './tools'
 
@@ -28,6 +32,7 @@ const USAGE = [
   '- /workflow continue [slug]: resume one',
   '- /workflow next: clear the context and continue',
   '- /workflow pause: write the handoff and stop',
+  '- /workflow models: choose the model and effort of each step',
   '- /workflow unlock <file> <reason>: unlock a locked test yourself',
   '- /workflow done <slug>, /workflow abandon <slug> <reason>: close one',
   '- /workflow adopt: set up this project, or rebuild workflows from their specs',
@@ -76,19 +81,26 @@ async function placement($: EngineInterface, session: Session, slug: string): Pr
   return { branch: context.repo.branch, worktree: context.repo.root, here: true }
 }
 
+async function askForTitle($: EngineInterface): Promise<string> {
+  await $.prompt.fill({ text: '/workflow new ' })
+  return 'name the workflow: type its title after /workflow new, then press Enter.'
+}
+
 async function start($: EngineInterface, session: Session, title: string): Promise<string> {
   const { context, now, runtime } = session
   const slug = slugify(title)
-  if (slug.length === 0) return 'give the workflow a title: /workflow new <title>'
+  if (slug.length === 0) return askForTitle($)
   if (context.workflows.some(workflow => workflow.slug === slug)) {
     return `"${slug}" exists already. /workflow continue ${slug} resumes it.`
   }
   let size: Size
   let commits: boolean
+  let autoNext: boolean
   let where: Awaited<ReturnType<typeof placement>>
   try {
     size = (await ask($, SIZE.question(title), [SIZE.feature, SIZE.project], 'Size')) === SIZE.project ? 'project' : 'feature'
     commits = (await ask($, COMMITS.question, [COMMITS.yes, COMMITS.no], 'Commits')) === COMMITS.yes
+    autoNext = (await ask($, CHAINING.question, [CHAINING.yes, CHAINING.no], 'Next slice')) === CHAINING.yes
     where = await placement($, session, slug)
   } catch (error) {
     return error instanceof Error && error.message.startsWith('git ')
@@ -96,7 +108,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
       : 'cancelled, nothing was created.'
   }
 
-  const phase = firstPhase(size, context.config === undefined)
+  const phase: Phase = 'intake'
   const workflow: Workflow = {
     slug,
     title,
@@ -107,7 +119,8 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     worktree: where.worktree,
     slice: 0,
     commits,
-    autoNext: false,
+    autoNext,
+    models: DEFAULT_PLAN,
     paths: [],
     session: await $.session.id(),
     updated: iso(now),
@@ -120,12 +133,15 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   }
   await saveWorkflow($, context.repo, context.paths, workflow)
   await registerToolsOnce($, runtime)
+  announcePhase($, workflow)
+  const fresh = (await loadContext($)) ?? context
+  await registerAgentsFor($, fresh, workflow)
   if (!where.here) {
-    return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Start a session there and run /workflow continue ${slug}.`
+    submitLater($, enterWorktreePrompt(workflow, await phasePrompt($, fresh, workflow)))
+    return `started "${slug}" (${size}) in the new worktree ${where.worktree} on ${where.branch}. Claude is moving the session there to start the intake.`
   }
-  const fresh = await loadContext($)
   await refreshStatus($, fresh)
-  submitLater($, await phasePrompt($, fresh ?? context, workflow))
+  submitLater($, await phasePrompt($, fresh, workflow))
   return `started "${slug}" (${size}) on ${where.branch}, phase ${phase}.`
 }
 
@@ -172,11 +188,22 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
   const resumed: Workflow = { ...target, status: 'active', session: sessionId, slice, updated: iso(now) }
   await saveWorkflow($, context.repo, context.paths, resumed)
   await refreshStatus($)
+  await registerAgents($)
   const prompt = await phasePrompt($, context, resumed, drift)
   if (clearFirst) clearThenSubmit($, prompt)
   else submitLater($, prompt)
   const action = clearFirst ? 'clearing the context, then continuing' : 'continuing'
   return `${action} "${target.slug}": ${await phaseLabel($, context, resumed)}.${elsewhere}`
+}
+
+async function models($: EngineInterface, { context }: Session): Promise<string> {
+  const workflow = context.current
+  if (workflow === undefined) return 'no workflow runs on this branch. /workflow continue <slug> picks one.'
+  const chosen = await chooseModels($, context, workflow, await recommendationsFor($, workflow.slug), 'stay')
+  if (chosen === 'pane') return `choose the model and effort of each step of "${workflow.slug}" in the Models panel.`
+  await registerAgents($)
+  const plan = renderPlan(chosen.models).join(', ')
+  return plan === renderPlan(workflow.models).join(', ') ? `the models of "${workflow.slug}" are unchanged.` : `the models of "${workflow.slug}" are now: ${plan}.`
 }
 
 async function pause($: EngineInterface, { context, now }: Session, slug: string | undefined): Promise<string> {
@@ -200,17 +227,27 @@ async function close($: EngineInterface, session: Session, slug: string | undefi
     const answer = await askOrUndefined($, `Run the retro of "${target.slug}" before closing it?`, [RETRO.run, RETRO.close], 'Retro')
     if (answer === undefined) return 'cancelled, nothing changed.'
     if (answer === RETRO.run) {
-      const retro: Workflow = { ...target, phase: 'retro', status: 'active', updated: iso(now) }
+      const retro: Workflow = { ...inPhase(target, 'retro'), status: 'active', updated: iso(now) }
       await saveWorkflow($, context.repo, context.paths, withLog(retro, day(now), 'retro started'))
       await refreshStatus($)
+      announcePhase($, retro)
       submitLater($, await phasePrompt($, context, retro))
       return `starting the retro of "${target.slug}".`
     }
   }
-  const done: Workflow = { ...target, phase: 'done', status: 'done', updated: iso(now) }
-  await saveWorkflow($, context.repo, context.paths, withLog(done, day(now), 'done'))
-  await refreshStatus($)
-  return `"${target.slug}" is done.`
+  let done = target
+  if (target.status !== 'done') {
+    done = withLog({ ...inPhase(target, 'done'), status: 'done', updated: iso(now) }, day(now), 'done')
+    await saveWorkflow($, context.repo, context.paths, done)
+    await refreshStatus($)
+  }
+  const closed = `"${target.slug}" is done.`
+  const ending = await offerEnding($, session.runtime, context, done, now)
+  if (ending.kind === 'leave') {
+    submitLater($, ending.prompt)
+    return `${closed} Claude leaves the worktree, then removes it.`
+  }
+  return ending.text === '' ? closed : `${closed} ${ending.text}`
 }
 
 function byThePerson(origin: PromptOrigin): boolean {
@@ -233,7 +270,7 @@ function inferred(files: ReadonlySet<string>, slicesText: string): { size: Size;
   }
   if (files.has('design.md')) return { size, phase: 'slice', slice: 0 }
   if (files.has('spec.md')) return { size, phase: 'design', slice: 0 }
-  return { size, phase: firstPhase(size, false), slice: 0 }
+  return { size, phase: 'intake', slice: 0 }
 }
 
 async function adopt($: EngineInterface, session: Session): Promise<string> {
@@ -263,6 +300,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       slice,
       commits: false,
       autoNext: false,
+      models: DEFAULT_PLAN,
       paths: [],
       session: await $.session.id(),
       updated: iso(now),
@@ -300,6 +338,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
       return resume($, session, rest[0], true)
     case 'pause':
       return pause($, session, rest[0])
+    case 'models':
+      return models($, session)
     case 'unlock':
       return unlock($, session, rest, origin)
     case 'done':
@@ -316,8 +356,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
 export async function registerCommand($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'workflow',
-    description: "This repo's workflows; new, continue, next, pause, unlock, done, abandon, adopt, all.",
-    argumentHint: '[new <title> | continue [slug] | next | pause | unlock <file> <reason> | done | abandon | adopt | all]',
+    description: "This repo's workflows; new, continue, next, pause, models, unlock, done, abandon, adopt, all.",
+    argumentHint: '[new <title> | continue [slug] | next | pause | models | unlock <file> <reason> | done | abandon | adopt | all]',
   })
 }
 

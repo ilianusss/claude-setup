@@ -19,19 +19,19 @@ describe('/workflow continue', () => {
     expect(ran.text).toContain('login')
     expect(fake.prompts[0]).toContain('The build phase')
     expect(fake.prompts[0]).toContain('Slice 1: Walking skeleton')
-    expect(fake.prompts[0]).toContain('Form and route.')
     expect(fake.prompts[0]).toContain('Write slice 1 tests.')
   })
 
-  test('a build step names the slice test command and the checks verify waits for', async ($, on) => {
+  test('a build step leaves the design sections and the checks to the build agent', async ($, on) => {
     const fake = fakeEngine(on, buildRepo(), 'feat/login')
     await start($)
 
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(fake.prompts[0]).toContain('`pnpm vitest run {files}`')
-    expect(fake.prompts[0]).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
+    expect(fake.prompts[0]).not.toContain('Form and route.')
+    expect(fake.prompts[0]).not.toContain('`pnpm vitest run {files}`')
+    expect(fake.prompts[0]).not.toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
   })
 
   test('offers to switch to the workflow branch', async ($, on) => {
@@ -59,6 +59,26 @@ describe('/workflow continue', () => {
     expect(fake.prompts[0]).toContain('3 commits behind origin/main')
     expect(fake.prompts[0]).toContain('rename the session store')
     expect(fake.prompts[0]).toContain('drift-check.md')
+  })
+
+  test('resumes at the saved sub-step of the phase and names it', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'intake', slice: '0', step: '2' }) }), 'feat/login')
+    await start($)
+
+    await run($, 'continue')
+    await fake.clock.settle()
+
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/step 2 of 4[^\n]*restate/i))
+  })
+
+  test('without a saved sub-step names no step to resume at', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'intake', slice: '0' }) }), 'feat/login')
+    await start($)
+
+    await run($, 'continue')
+    await fake.clock.settle()
+
+    expect(fake.prompts[0]).not.toEqual(expect.stringMatching(/step \d+ of 4/i))
   })
 
   test('says when there is no workflow to continue', async ($, on) => {
@@ -149,6 +169,26 @@ describe('/workflow adopt', () => {
 
     expect(state(fake.files)).toMatchObject({ phase: 'build', slice: 2, size: 'feature', branch: 'feat/login' })
     expect(ran.text).toContain('login')
+  })
+
+  test('rebuilds a spec folder that holds no document into the intake, with an empty goal', async ($, on) => {
+    const fake = fakeEngine(on, { ...buildRepo(), [`${ROOT}/docs/specs/billing/.gitkeep`]: '' }, 'feat/login')
+    fake.answers.push(ADOPT.rebuild)
+    await start($)
+
+    await run($, 'adopt')
+
+    expect(state(fake.files, 'billing')).toMatchObject({ phase: 'intake', goal: '' })
+  })
+
+  test('rebuilds a spec folder with a design into the slice phase', async ($, on) => {
+    const fake = fakeEngine(on, { ...buildRepo(), [`${ROOT}/docs/specs/billing/design.md`]: '# Design\n' }, 'feat/login')
+    fake.answers.push(ADOPT.rebuild)
+    await start($)
+
+    await run($, 'adopt')
+
+    expect(state(fake.files, 'billing').phase).toBe('slice')
   })
 
   test('runs the setup phase when the project has no workflow.json', async ($, on) => {

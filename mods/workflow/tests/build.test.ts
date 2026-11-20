@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { UNLOCK } from '../src/labels'
+import { NEXT_SLICE, UNLOCK } from '../src/labels'
 import { parseWorkflow } from '../src/state'
 import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
@@ -31,6 +31,13 @@ async function greenChecks($: Engine, fake: Fake): Promise<void> {
   for (const command of CHECKS) await bash($, fake, command, 0)
 }
 
+async function verifiedSlice($: Engine, fake: Fake): Promise<string> {
+  await start($)
+  await lockedSlice($, fake)
+  await greenChecks($, fake)
+  return resultText(await $.tool.call({ tool: 'mcp__workflow__verify' }))
+}
+
 function repoWithTest(extra: Record<string, string> = {}): Record<string, string> {
   return buildRepo({ [TEST_FILE]: "it('totals', () => expect(total()).toBe(30))\n", [CODE_FILE]: 'export const total = () => 0\n', ...extra })
 }
@@ -53,7 +60,7 @@ describe('lock', () => {
     await lockedSlice($, fake)
 
     expect(JSON.parse(fake.files.get(LOCK_FILE) ?? '{}')).toMatchObject({ phase: 'green', sliceFiles: ['src/cart.test.ts'] })
-    expect(fake.statuses.at(-1)).toBe('workflow login: build 1/2, tests locked')
+    expect(fake.statuses.at(-1)).toBe('workflow login: build 1/2, opus medium, waiting for you')
   })
 
   test('a passing run does not count as red', async ($, on) => {
@@ -185,32 +192,88 @@ describe('unlock typed by the person', () => {
   })
 })
 
-describe('auto_next', () => {
-  test('a verified slice starts the next one in a fresh context when the turn ends', async ($, on) => {
+describe('the next slice', () => {
+  test('with auto_next, verify ends the turn and submits the spawn of workflow:build for the next slice without asking', async ($, on) => {
     const fake = fakeEngine(on, repoWithTest({ [`${STATE_DIR}/login.md`]: stateText({ auto_next: 'yes' }) }), 'feat/login')
-    await start($)
-    await lockedSlice($, fake)
-    await greenChecks($, fake)
-    await $.tool.call({ tool: 'mcp__workflow__verify' })
 
-    await $.turn.complete({ answer: 'Slice 1 done.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const verified = await verifiedSlice($, fake)
+    const submittedDuringTheCall = fake.prompts.length
     await fake.clock.settle()
 
-    expect(fake.commands).toContain('clear')
-    expect(fake.prompts.at(-1)).toContain('Slice 2: Password check')
+    expect(verified).toContain('End your turn')
+    expect(verified).not.toContain('Spawn `workflow:build`')
+    expect(submittedDuringTheCall).toBe(0)
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
+    expect(fake.prompts[0]).not.toContain('/workflow next')
+    expect(fake.questions).toHaveLength(0)
+    expect(parseWorkflow(fake.files.get(`${STATE_DIR}/login.md`) ?? '')).toMatchObject({ phase: 'build', slice: 2 })
   })
 
-  test('without auto_next the turn ends and waits for /workflow next', async ($, on) => {
-    const fake = fakeEngine(on, repoWithTest(), 'feat/login')
-    await start($)
-    await lockedSlice($, fake)
-    await greenChecks($, fake)
-    await $.tool.call({ tool: 'mcp__workflow__verify' })
+  test('with auto_next, the turn ending neither clears the context nor submits a prompt beyond the next slice', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest({ [`${STATE_DIR}/login.md`]: stateText({ auto_next: 'yes' }) }), 'feat/login')
+    await verifiedSlice($, fake)
 
     await $.turn.complete({ answer: 'Slice 1 done.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await fake.clock.settle()
 
     expect(fake.commands).not.toContain('clear')
+    expect(fake.prompts).toHaveLength(1)
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
+  })
+
+  test('without auto_next, verify asks whether to start the next slice', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest(), 'feat/login')
+    fake.answers.push(NEXT_SLICE.start(2))
+
+    await verifiedSlice($, fake)
+
+    expect(fake.questions).toEqual([NEXT_SLICE.question('login', 1)])
+  })
+
+  test('without auto_next, starting now ends the turn and submits the spawn of workflow:build for the next slice', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest(), 'feat/login')
+    fake.answers.push(NEXT_SLICE.start(2))
+
+    const verified = await verifiedSlice($, fake)
+    await fake.clock.settle()
+
+    expect(verified).not.toContain('Spawn `workflow:build`')
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
+  })
+
+  test('without auto_next, stopping says to hand off and stop, naming /workflow continue', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest(), 'feat/login')
+    fake.answers.push(NEXT_SLICE.stop)
+
+    const verified = await verifiedSlice($, fake)
+
+    expect(verified).toContain('mcp__workflow__handoff')
+    expect(verified).toContain('/workflow continue login')
+    expect(verified).not.toContain('Spawn `workflow:build`')
+    expect(verified).not.toContain('/workflow next')
+    expect(parseWorkflow(fake.files.get(`${STATE_DIR}/login.md`) ?? '')).toMatchObject({ phase: 'build', slice: 2 })
+  })
+
+  test('without auto_next, a dismissed dialog stops as Stop here does', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest(), 'feat/login')
+
+    const verified = await verifiedSlice($, fake)
+
+    expect(verified).toContain('/workflow continue login')
+    expect(verified).not.toContain('Spawn `workflow:build`')
+  })
+
+  test('after the last slice, verify ends the turn and submits the inspect prompt', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest({ [`${STATE_DIR}/login.md`]: stateText({ slice: '2' }) }), 'feat/login')
+
+    const verified = await verifiedSlice($, fake)
+    await fake.clock.settle()
+
+    expect(verified).not.toContain('Do the inspect work.')
+    expect(fake.prompts[0]).toContain('inspect phase')
+    expect(fake.prompts[0]).toContain('Do the inspect work.')
+    expect(fake.prompts[0]).not.toContain('/workflow next')
+    expect(fake.questions).toHaveLength(0)
   })
 })
 

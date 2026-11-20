@@ -8,7 +8,8 @@ import { parseSlices } from './slices'
 import type { Slice } from './slices'
 import { listWorkflows, pathsFor } from './store'
 import type { Paths } from './store'
-import type { Workflow } from './state'
+import { pipeline } from './state'
+import type { Phase, Workflow } from './state'
 
 export type Context = {
   repo: Repo
@@ -41,6 +42,10 @@ export async function loadContext($: EngineInterface): Promise<Context | undefin
   }
   const current = workflows.find(workflow => isOpen(workflow) && workflow.branch === repo.branch)
   return { repo, paths, workflows, current, config, configErrors }
+}
+
+export function pipelineOf(context: Context, workflow: Workflow): Phase[] {
+  return pipeline(workflow.size, context.config === undefined || workflow.phase === 'setup')
 }
 
 export function specsFolder(context: Context, workflow: Workflow): string {

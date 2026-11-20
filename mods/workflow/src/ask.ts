@@ -1,7 +1,9 @@
 import type { EngineInterface } from 'claude-code'
 
+import { whileWaiting } from './status'
+
 export function ask($: EngineInterface, question: string, options: readonly string[], header: string): Promise<string> {
-  return $.ui.ask(question, { options, header })
+  return whileWaiting($, () => $.ui.ask(question, { options, header }))
 }
 
 export async function askOrUndefined(

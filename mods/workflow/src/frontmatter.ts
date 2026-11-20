@@ -40,6 +40,10 @@ export function parseFrontmatter(text: string): { data: Frontmatter; body: strin
   return { data, body: text.slice(match[0].length) }
 }
 
+export function withoutFrontmatter(text: string): string {
+  return text.replace(BLOCK, '').trim()
+}
+
 function renderScalar(value: string, plain: RegExp): string {
   return value === '' || plain.test(value) ? value : JSON.stringify(value)
 }
