@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { Engine } from 'claude-code/testing'
+import type { Engine, Mounted } from 'claude-code/testing'
 
 import type { WorkflowBanner } from '../types'
-import { detailLine, stepSegments } from '../src/banner'
-import { GATE, MODELS, NEXT_SLICE } from '../src/labels'
+import { bandLine } from '../src/banner'
+import { GATE, MODELS, NEXT_SLICE, SWITCH } from '../src/labels'
 import { statusText } from '../src/status'
-import { ROOT, STATE_DIR, buildRepo, fakeEngine, start, stateText } from './engine'
+import { HINT_LINE, PROMPT_HINT, ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
@@ -28,16 +28,19 @@ function withoutConfig(files: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(files).filter(([path]) => path !== `${ROOT}/.claude/workflow.json`))
 }
 
-function mountBand($: Engine, surface: 'terminal' | 'desktop' = 'terminal', props: { hasSurvey?: boolean } = {}) {
-  return $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface })
+function mountBand($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
+  return surface === 'terminal' ? $.ui.mount(PROMPT_HINT) : $.ui.mount({ ...BAND, surface })
 }
 
-async function bandLines($: Engine, surface: 'terminal' | 'desktop' = 'terminal'): Promise<{ steps: string; detail: string }> {
+async function bandText($: Engine, surface: 'terminal' | 'desktop' = 'terminal'): Promise<string> {
   const ui = await mountBand($, surface)
-  const steps = (await ui.find({ type: 'Text', text: /intake/ }))?.text ?? ''
-  const detail = (await ui.find({ type: 'Text', text: /working|waiting for you/ }))?.text ?? ''
+  const text = (await ui.find({ type: 'Text', text: /working|waiting for you/ }))?.text ?? ''
   await ui.unmount()
-  return { steps, detail }
+  return text
+}
+
+async function bandBox(ui: Pick<Mounted, 'findAll'>) {
+  return (await ui.findAll({ type: 'Box' })).find(box => box.props.borderStyle === 'round')
 }
 
 async function submitPrompt($: Engine): Promise<void> {
@@ -73,22 +76,133 @@ function view(fields: Partial<WorkflowBanner> = {}): WorkflowBanner {
   }
 }
 
-describe('the first line of the band', () => {
+describe('where the band is drawn', () => {
+  test('on the terminal, draws the band under the prompt, after the hint line the engine and other mods drew', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const ui = await $.ui.mount(PROMPT_HINT)
+    const texts = (await ui.findAll({ type: 'Text' })).map(text => text.text)
+
+    expect(texts[0]).toBe(HINT_LINE)
+    expect(texts.some(text => /intake.*design.*waiting for you/.test(text))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('on the terminal, draws one line in a round border as wide as the hint row', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const ui = await $.ui.mount(PROMPT_HINT)
+    const box = await bandBox(ui)
+
+    expect(box?.props.width).toBe(100)
+    expect(box?.children).toHaveLength(1)
+    expect(box?.children[0]).toMatchObject({ type: 'Text', props: { wrap: 'truncate-end' } })
+    await ui.unmount()
+  })
+
+  test('on a terminal that has not measured its width yet, sizes the band to 80 columns', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const { viewport: _, ...unmeasured } = PROMPT_HINT
+    const ui = await $.ui.mount(unmeasured)
+
+    expect((await bandBox(ui))?.props.width).toBe(75)
+    await ui.unmount()
+  })
+
+  test('on the terminal, draws nothing above the prompt any more', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+    expect(await ui.find({ type: 'Text' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('on the desktop, draws one line in a round border above the prompt and leaves the hint line alone', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const above = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const box = await bandBox(above)
+    await above.unmount()
+    const hint = await $.ui.mount({ ...PROMPT_HINT, surface: 'desktop' })
+    const hintTexts = (await hint.findAll({ type: 'Text' })).map(text => text.text)
+    await hint.unmount()
+
+    expect(box?.children).toHaveLength(1)
+    expect(box?.children[0]).toMatchObject({ type: 'Text', props: { wrap: 'truncate-end' } })
+    expect(hintTexts).toEqual([HINT_LINE])
+  })
+
+  test('without a workflow on this branch, leaves the hint line alone and draws nothing above the prompt', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'main')
+    await start($)
+
+    const hint = await $.ui.mount(PROMPT_HINT)
+    const hintTexts = (await hint.findAll({ type: 'Text' })).map(text => text.text)
+    await hint.unmount()
+    const above = await $.ui.mount({ ...BAND, surface: 'desktop' })
+
+    expect(hintTexts).toEqual([HINT_LINE])
+    expect(await above.find({ type: 'Text' })).toBeUndefined()
+    await above.unmount()
+  })
+
+  test('on the desktop, gives the band to a survey', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'desktop' })
+
+    expect(await ui.find({ type: 'Text' })).toBeUndefined()
+    await ui.unmount()
+  })
+})
+
+describe('when the band shows', () => {
+  test('at the start of a session on the branch of a current workflow, before any command', async ($, on) => {
+    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    await start($)
+
+    expect(await bandText($)).toContain('design')
+  })
+
+  test('right after /workflow continue switches to the branch of the workflow', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo(), 'main')
+    fake.answers.push(SWITCH.yes('feat/login'))
+    await start($)
+    const before = await bandText($)
+
+    await run($, 'continue login')
+
+    expect(before).toBe('')
+    expect(await bandText($)).toContain('build 1/2: writing tests')
+  })
+})
+
+describe('the steps on the band', () => {
   for (const surface of SURFACES) {
-    test(`on ${surface}, lists the steps of a feature in pipeline order, the current one bold and coloured, the others dim`, async ($, on) => {
-      fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
+    test(`on ${surface}, lists the steps of a feature in pipeline order: finished ones in the success colour, the current one bold and coloured, later ones dim`, async ($, on) => {
+      fakeEngine(on, repo({ phase: 'slice', slice: '0' }), 'feat/login')
       await start($)
 
       const ui = await mountBand($, surface)
       const line = (await ui.find({ type: 'Text', text: /intake/ }))?.text ?? ''
-      const current = await ui.find({ type: 'Text', text: /^design$/ })
-      const others = await Promise.all(['intake', 'slice', 'build', 'inspect'].map(step => ui.find({ type: 'Text', text: new RegExp(`^${step}$`) })))
+      const done = await Promise.all(['intake', 'design'].map(step => ui.find({ type: 'Text', text: new RegExp(`^${step}$`) })))
+      const current = await ui.find({ type: 'Text', text: /^slice$/ })
+      const later = await Promise.all(['build', 'inspect'].map(step => ui.find({ type: 'Text', text: new RegExp(`^${step}$`) })))
 
       expect(line).toMatch(/intake.*design.*slice.*build.*inspect/)
+      expect(done.map(step => step?.props.color)).toEqual(['success', 'success'])
       expect(current?.props.weight).toBe('bold')
-      expect(current?.props.color).toBeDefined()
+      expect(current?.props.color).toBe('suggestion')
       expect(current?.props.dimColor).not.toBe(true)
-      expect(others.map(other => other?.props.dimColor)).toEqual([true, true, true, true])
+      expect(later.map(step => step?.props.dimColor)).toEqual([true, true])
       await ui.unmount()
     })
 
@@ -96,30 +210,31 @@ describe('the first line of the band', () => {
       fakeEngine(on, repo({ phase: 'inspect' }), 'feat/login')
       await start($)
 
-      const { steps } = await bandLines($, surface)
+      const text = await bandText($, surface)
 
-      expect(steps).toMatch(/intake.*inspect/)
-      expect(steps).not.toMatch(DONE_MARKERS)
+      expect(text).toMatch(/intake.*inspect/)
+      expect(text).not.toMatch(DONE_MARKERS)
     })
   }
 
-  test('lists setup, spec and retro for a project that has no workflow.json yet', async ($, on) => {
+  test('in a wide terminal lists setup, spec and retro for a project that has no workflow.json yet', async ($, on) => {
     fakeEngine(on, withoutConfig(repo({ size: 'project', phase: 'intake', slice: '0' })), 'feat/login')
     await start($)
 
-    const { steps } = await bandLines($)
+    const ui = await $.ui.mount({ ...PROMPT_HINT, viewport: { columns: 120, rows: 40 } })
 
-    expect(steps).toMatch(/intake.*setup.*spec.*design.*slice.*build.*inspect.*retro/)
+    expect((await ui.find({ type: 'Text', text: /intake/ }))?.text).toMatch(/intake.*setup.*spec.*design.*slice.*build.*inspect.*retro/)
+    await ui.unmount()
   })
 
   test('leaves setup out once the project has its workflow.json', async ($, on) => {
     fakeEngine(on, repo({ size: 'project', phase: 'spec', slice: '0' }), 'feat/login')
     await start($)
 
-    const { steps } = await bandLines($)
+    const text = await bandText($)
 
-    expect(steps).toMatch(/intake.*spec.*design.*slice.*build.*inspect.*retro/)
-    expect(steps).not.toContain('setup')
+    expect(text).toMatch(/intake.*spec.*design.*slice.*build.*inspect.*retro/)
+    expect(text).not.toContain('setup')
   })
 
   test('shows the slice count on build', async ($, on) => {
@@ -131,79 +246,38 @@ describe('the first line of the band', () => {
     expect((await ui.find({ type: 'Text', text: /^build 1\/2$/ }))?.props.weight).toBe('bold')
     await ui.unmount()
   })
-
-  test('draws nothing without a workflow on this branch', async ($, on) => {
-    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'main')
-    await start($)
-
-    const ui = await mountBand($)
-
-    expect(await ui.find({ type: 'Text' })).toBeUndefined()
-    await ui.unmount()
-  })
-
-  test('gives the band to a survey', async ($, on) => {
-    fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
-    await start($)
-
-    const ui = await mountBand($, 'terminal', { hasSurvey: true })
-
-    expect(await ui.find({ type: 'Text' })).toBeUndefined()
-    await ui.unmount()
-  })
-
-  test('in a narrow terminal keeps the current step in view and fits the width', () => {
-    const segments = stepSegments(view({ phase: 'build', slice: { number: 2, count: 5 }, step: { name: 'tests locked' } }), 24)
-    const width = segments.map(segment => segment.label).join('  ').length
-
-    expect(segments.find(segment => segment.isCurrent)?.label).toBe('build 2/5')
-    expect(width).toBeLessThanOrEqual(24)
-  })
-
-  test('in a wide terminal lists every step, only the current one marked', () => {
-    const segments = stepSegments(view(), 100)
-
-    expect(segments).toEqual([
-      { label: 'intake', isCurrent: false },
-      { label: 'design', isCurrent: true },
-      { label: 'slice', isCurrent: false },
-      { label: 'build', isCurrent: false },
-      { label: 'inspect', isCurrent: false },
-    ])
-  })
 })
 
-describe('the second line of the band', () => {
+describe('the details on the band', () => {
   test("names the model and effort of the step's agent, from the plan", async ($, on) => {
     fakeEngine(on, repo({ phase: 'design', slice: '0', models: '[design sonnet low]' }), 'feat/login')
     await start($)
 
-    const { detail } = await bandLines($)
-
-    expect(detail).toContain('design')
-    expect(detail).toContain('sonnet low')
+    expect(await bandText($)).toContain('design · sonnet low · ')
   })
 
   test('says the intake runs in the conversation', async ($, on) => {
     fakeEngine(on, repo({ phase: 'intake', slice: '0' }), 'feat/login')
     await start($)
 
-    const { detail } = await bandLines($)
-
-    expect(detail).toContain('conversation')
+    expect(await bandText($)).toContain('conversation')
   })
 
-  test('says working from a submitted prompt, then waiting for you once the turn completes', async ($, on) => {
+  test('says working, dim, from a submitted prompt, then waiting for you in the warning colour once the turn completes', async ($, on) => {
     fakeEngine(on, repo({ phase: 'design', slice: '0' }), 'feat/login')
     await start($)
 
     await submitPrompt($)
-    const working = (await bandLines($)).detail
+    const working = await mountBand($)
+    const workingText = await working.find({ type: 'Text', text: /^working$/ })
+    await working.unmount()
     await turnEnds($)
-    const waiting = (await bandLines($)).detail
+    const waiting = await mountBand($)
+    const waitingText = await waiting.find({ type: 'Text', text: /^waiting for you$/ })
+    await waiting.unmount()
 
-    expect(working).toContain('working')
-    expect(waiting).toContain('waiting for you')
+    expect(workingText?.props.dimColor).toBe(true)
+    expect(waitingText?.props.color).toBe('warning')
   })
 
   test('a failing activity update still submits the prompt and is logged to debug', async ($, on) => {
@@ -229,7 +303,7 @@ describe('the second line of the band', () => {
 
     await turnEnds($, 'a1')
 
-    expect((await bandLines($)).detail).toContain('working')
+    expect(await bandText($)).toContain('working')
   })
 
   test("says waiting for you while one of the mod's dialogs is open, then working again", async ($, on) => {
@@ -258,18 +332,18 @@ describe('the second line of the band', () => {
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.' })
 
     expect(fake.opened).toHaveLength(1)
-    expect((await bandLines($)).detail).toContain('waiting for you')
+    expect(await bandText($)).toContain('waiting for you')
   })
 
   test('names the build sub-step from the lock: writing tests, then tests locked', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [TEST_FILE]: "it('totals', () => expect(total()).toBe(30))\n" }), 'feat/login')
     await start($)
-    const writing = (await bandLines($)).detail
+    const writing = await bandText($)
 
     await lockedSlice($, fake)
 
     expect(writing).toContain('build 1/2: writing tests')
-    expect((await bandLines($)).detail).toContain('build 1/2: tests locked')
+    expect(await bandText($)).toContain('build 1/2: tests locked')
   })
 
   test("says a slice is verified until the build agent's run ends", async ($, on) => {
@@ -280,33 +354,75 @@ describe('the second line of the band', () => {
     await greenChecks($, fake)
 
     await $.tool.call({ tool: 'mcp__workflow__verify', agentId: 'a1' })
-    const verified = (await bandLines($)).detail
+    const verified = await bandText($)
     await turnEnds($, 'a1')
     await fake.clock.settle()
 
     expect(verified).toContain('slice 1 verified')
-    expect((await bandLines($)).detail).toContain('build 2/2: writing tests')
+    expect(await bandText($)).toContain('build 2/2: writing tests')
   })
 
   test('names the inspect sub-step review', async ($, on) => {
     fakeEngine(on, repo({ phase: 'inspect' }), 'feat/login')
     await start($)
 
-    expect((await bandLines($)).detail).toContain('inspect: review')
+    expect(await bandText($)).toContain('inspect: review')
+  })
+})
+
+describe('fitting the band in one line', () => {
+  const working = { lead: 'design 3/6: proposing options · opus high · ', activity: 'working' }
+
+  test('in a wide terminal lists every step with its state, then the sub-step, the model and the activity', () => {
+    expect(bandLine(view(), 'working', 100)).toEqual({
+      steps: [
+        { label: 'intake', state: 'done' },
+        { label: 'design', state: 'current' },
+        { label: 'slice', state: 'next' },
+        { label: 'build', state: 'next' },
+        { label: 'inspect', state: 'next' },
+      ],
+      ...working,
+    })
   })
 
-  test('in a narrow terminal shortens the sub-step and keeps whether it waits for you whole', () => {
-    const line = detailLine(view({ step: { name: 'proposing options to the user in a dialog', number: 3, count: 6 } }), 'waiting', 40)
-
-    expect(line.activity).toBe('waiting for you')
-    expect(`${line.lead}${line.activity}`.length).toBeLessThanOrEqual(40)
-    expect(line.lead.startsWith('design 3/6')).toBe(true)
+  test('first drops the steps before the current one', () => {
+    expect(bandLine(view(), 'working', 90)).toEqual({
+      steps: [
+        { label: '...', state: 'done' },
+        { label: 'design', state: 'current' },
+        { label: 'slice', state: 'next' },
+        { label: 'build', state: 'next' },
+        { label: 'inspect', state: 'next' },
+      ],
+      ...working,
+    })
   })
 
-  test('in a wide terminal reads sub-step, model and activity in that order', () => {
-    const line = detailLine(view(), 'working', 100)
+  test('then drops the steps after it', () => {
+    expect(bandLine(view(), 'working', 80)).toEqual({
+      steps: [
+        { label: '...', state: 'done' },
+        { label: 'design', state: 'current' },
+        { label: 'slice', state: 'next' },
+        { label: '...', state: 'next' },
+      ],
+      ...working,
+    })
+  })
 
-    expect(`${line.lead}${line.activity}`).toMatch(/^design 3\/6: proposing options.*opus high.*working$/)
+  test('then drops the list of steps, since the sub-step names the current one', () => {
+    expect(bandLine(view(), 'working', 60)).toEqual({ steps: [], ...working })
+  })
+
+  test('then shortens the sub-step, keeping the model while the sub-step keeps a few letters', () => {
+    expect(bandLine(view(), 'waiting', 50)).toEqual({ steps: [], lead: 'design 3/6: propo... · opus high · ', activity: 'waiting for you' })
+  })
+
+  test('in a narrow terminal drops the model and keeps the current step and whether it waits for you whole', () => {
+    const line = bandLine(view({ phase: 'build', slice: { number: 2, count: 5 }, step: { name: 'tests locked' }, runner: 'opus medium' }), 'waiting', 40)
+
+    expect(line).toEqual({ steps: [], lead: 'build 2/5: tests lo... · ', activity: 'waiting for you' })
   })
 })
 

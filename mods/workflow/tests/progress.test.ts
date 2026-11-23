@@ -6,23 +6,16 @@ import { subSteps } from '../src/phases'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow, renderWorkflow } from '../src/state'
 import type { Workflow } from '../src/state'
-import { INTAKE_PHASE, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { INTAKE_PHASE, PROMPT_HINT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
 const INTAKE = buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0' }) })
-const BAND = {
-  plugin: 'workflow',
-  component: 'AbovePrompt',
-  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
-  surface: 'terminal',
-} as const
-
 function text(ran: { deny?: string; result?: unknown }): string {
   return ran.deny ?? String(ran.result)
 }
 
-async function detailLine($: Engine): Promise<string> {
-  const ui = await $.ui.mount(BAND)
+async function bandText($: Engine): Promise<string> {
+  const ui = await $.ui.mount(PROMPT_HINT)
   const found = (await ui.find({ type: 'Text', text: /working|waiting for you/ }))?.text ?? ''
   await ui.unmount()
   return found
@@ -65,7 +58,7 @@ describe('mcp__workflow__progress', () => {
     expect(ran.deny).toBeUndefined()
     expect(text(ran)).toContain('restate')
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '').step).toBe(2)
-    expect(await detailLine($)).toContain('intake 2/4: restate')
+    expect(await bandText($)).toContain('intake 2/4: restate')
   })
 
   for (const step of [0, 5, 2.5, -1]) {
@@ -169,7 +162,7 @@ describe('the saved sub-step', () => {
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(await detailLine($)).toContain('intake 3/4: save')
+    expect(await bandText($)).toContain('intake 3/4: save')
   })
 
   test('is cleared when the phase changes', async ($, on) => {

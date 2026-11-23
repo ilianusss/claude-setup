@@ -7,7 +7,7 @@ Goal: make this project ready for workflows. You learn how to build, test and ch
 
 ## With the user
 
-Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the workflow band shows where the user is.
 
 1. **Spawn** `workflow:setup` to read the project, prove its commands and draft the three files, and wait for its report.
 2. **Ask the user**, in one AskUserQuestion batch, only what the files cannot tell: the test level (the table in `writing-tests-first`), the invariants that must never break, the conventions the agent saw but is unsure of, and the agent's other open questions.

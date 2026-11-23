@@ -6,18 +6,11 @@ import { GATE } from '../src/labels'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow, renderWorkflow, reviewRoundOf } from '../src/state'
 import type { Workflow } from '../src/state'
-import { STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { PROMPT_HINT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
 const AGENT_TYPES: Record<string, string> = { r1: 'workflow:review', r2: 'workflow:review', b1: 'workflow:build' }
-const BAND = {
-  plugin: 'workflow',
-  component: 'AbovePrompt',
-  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
-  surface: 'terminal',
-} as const
-
 const WORKFLOW: Workflow = {
   slug: 'login',
   title: 'Add login',
@@ -68,8 +61,8 @@ async function runEnds($: Engine, agentId: string, reason: 'answer' | 'aborted' 
   await $.turn.complete({ answer: 'Findings.', durationMs: 1, isAborted: reason === 'aborted', turnId: `t-${agentId}`, reason, agentId })
 }
 
-async function detailLine($: Engine): Promise<string> {
-  const ui = await $.ui.mount(BAND)
+async function bandText($: Engine): Promise<string> {
+  const ui = await $.ui.mount(PROMPT_HINT)
   const found = (await ui.find({ type: 'Text', text: /working|waiting for you/ }))?.text ?? ''
   await ui.unmount()
   return found
@@ -166,11 +159,11 @@ describe('a review round', () => {
 })
 
 describe('the band in inspect', () => {
-  test('shows the saved review round out of 3 on its second line', async ($, on) => {
+  test('shows the saved review round out of 3 on the band', async ($, on) => {
     fakeEngine(on, inspectRepo({ review_round: '2' }), 'feat/login')
     await start($)
 
-    expect(await detailLine($)).toContain('inspect: review round 2/3')
+    expect(await bandText($)).toContain('inspect: review round 2/3')
   })
 
   test('shows the new round once a review run ends', async ($, on) => {
@@ -180,7 +173,7 @@ describe('the band in inspect', () => {
 
     await runEnds($, 'r1')
 
-    expect(await detailLine($)).toContain('inspect: review round 1/3')
+    expect(await bandText($)).toContain('inspect: review round 1/3')
   })
 })
 

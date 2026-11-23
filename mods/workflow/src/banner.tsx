@@ -1,30 +1,57 @@
-import type { EngineInterface, On } from 'claude-code'
+import type { EngineInterface, On, RenderInput, TextProps } from 'claude-code'
 
 import type { WorkflowActivity, WorkflowBanner } from '../types'
 import { describe } from './refusal'
 import { ACTIVITY_TEXT, currentActivity, currentBanner, phaseText, setActivity } from './status'
 
-export type StepSegment = { label: string; isCurrent: boolean }
-export type DetailLine = { lead: string; activity: string }
+export type StepState = 'done' | 'current' | 'next'
+export type StepSegment = { label: string; state: StepState }
+export type BandLine = { steps: StepSegment[]; lead: string; activity: string }
 
 const STEP_GAP = '  '
+const SECTION_GAP = ' │ '
 const PART_GAP = ' · '
 const ELLIPSIS = '...'
 const SHORTEST_STEP = 12
+const FRAME_WIDTH = 4
+// The terminal's hint row under the prompt keeps two columns before it and three after, as the skin plugin's usage band measures it.
+const HINT_INSET = 5
+const UNMEASURED_COLUMNS = 80
 
-function widthOf(segments: readonly StepSegment[]): number {
-  return segments.map(segment => segment.label).join(STEP_GAP).length
+const STEP_LOOK: Readonly<Record<StepState, TextProps>> = {
+  done: { color: 'success' },
+  current: { weight: 'bold', color: 'suggestion' },
+  next: { dimColor: true },
 }
 
-// Drops the steps before the current one until the line fits, so a narrow terminal still shows where the workflow is.
-export function stepSegments(view: WorkflowBanner, columns: number): StepSegment[] {
-  const all = view.phases.map(phase => ({ label: phase === view.phase ? phaseText(view) : phase, isCurrent: phase === view.phase }))
-  const current = Math.max(all.findIndex(segment => segment.isCurrent), 0)
-  let shown = all
-  for (let first = 1; first <= current && widthOf(shown) > columns; first += 1) {
-    shown = [{ label: ELLIPSIS, isCurrent: false }, ...all.slice(first)]
-  }
-  return shown
+function widthOf(steps: readonly StepSegment[]): number {
+  return steps.length === 0 ? 0 : steps.map(segment => segment.label).join(STEP_GAP).length + SECTION_GAP.length
+}
+
+function stateOf(index: number, current: number): StepState {
+  if (index < current) return 'done'
+  return index === current ? 'current' : 'next'
+}
+
+function windowOf(all: readonly StepSegment[], first: number, last: number): StepSegment[] {
+  return [
+    ...(first > 0 ? [{ label: ELLIPSIS, state: 'done' as const }] : []),
+    ...all.slice(first, last + 1),
+    ...(last < all.length - 1 ? [{ label: ELLIPSIS, state: 'next' as const }] : []),
+  ]
+}
+
+// Widest first: the steps before the current one go, then those after it, then the whole list, since the sub-step
+// names the current step too.
+function stepChoices(view: WorkflowBanner): StepSegment[][] {
+  const current = view.phases.indexOf(view.phase)
+  const all = view.phases.map((phase, index) => ({ label: index === current ? phaseText(view) : phase, state: stateOf(index, current) }))
+  if (current === -1) return [all, []]
+  const end = all.length - 1
+  const windows: Array<[number, number]> = []
+  for (let first = 0; first <= current; first += 1) windows.push([first, end])
+  for (let last = end - 1; last > current; last -= 1) windows.push([current, last])
+  return [...windows.filter(([first, last]) => last > first).map(([first, last]) => windowOf(all, first, last)), []]
 }
 
 function subStepText(view: WorkflowBanner): string {
@@ -38,14 +65,33 @@ function shortened(text: string, room: number): string {
   return text.length <= room ? text : `${text.slice(0, Math.max(room - ELLIPSIS.length, 0))}${ELLIPSIS}`
 }
 
-// Shortens the sub-step first and drops the model next, so whether the workflow waits for the user always shows.
-export function detailLine(view: WorkflowBanner, now: WorkflowActivity, columns: number): DetailLine {
-  const shown = ACTIVITY_TEXT[now]
+// Drops steps until the line fits, then shortens the sub-step and drops the model, so whether the workflow waits for
+// the user always shows.
+export function bandLine(view: WorkflowBanner, now: WorkflowActivity, columns: number): BandLine {
+  const activity = ACTIVITY_TEXT[now]
   const step = subStepText(view)
   const withRunner = `${PART_GAP}${view.runner}${PART_GAP}`
-  if (step.length + withRunner.length + shown.length <= columns) return { lead: `${step}${withRunner}`, activity: shown }
-  const tail = columns - withRunner.length - shown.length >= SHORTEST_STEP ? withRunner : PART_GAP
-  return { lead: `${shortened(step, columns - tail.length - shown.length)}${tail}`, activity: shown }
+  const lead = `${step}${withRunner}`
+  const steps = stepChoices(view).find(choice => widthOf(choice) + lead.length + activity.length <= columns)
+  if (steps !== undefined) return { steps, lead, activity }
+  const room = columns - activity.length
+  const tail = room - withRunner.length >= SHORTEST_STEP ? withRunner : PART_GAP
+  return { steps: [], lead: `${shortened(step, room - tail.length)}${tail}`, activity }
+}
+
+function bandRow($: EngineInterface, e: RenderInput<'PromptHint' | 'AbovePrompt'>, line: BandLine, now: WorkflowActivity, width?: number) {
+  const { Box, Text } = $.ui.resolve(e)
+  const segments = line.steps.flatMap((segment, index) => [...(index > 0 ? [STEP_GAP] : []), <Text {...STEP_LOOK[segment.state]}>{segment.label}</Text>])
+  const steps = segments.length === 0 ? [] : [...segments, <Text dimColor>{SECTION_GAP}</Text>]
+  return (
+    <Box borderStyle="round" borderColor="subtle" paddingX={1} {...(width === undefined ? {} : { width })}>
+      <Text wrap="truncate-end">
+        {steps}
+        <Text dimColor>{line.lead}</Text>
+        {now === 'waiting' ? <Text color="warning">{line.activity}</Text> : <Text dimColor>{line.activity}</Text>}
+      </Text>
+    </Box>
+  )
 }
 
 // The band is a display and this hook runs in every session: a failed update is logged, and the prompt goes on.
@@ -81,32 +127,31 @@ export function registerBanner(on: On): void {
     return submitted
   })
 
+  // On the terminal the band is a bordered row under the prompt, beside the skin plugin's usage band: the hint line
+  // and what other mods drew there stay above it.
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const theirs = await next(e)
+    if (e.surface !== 'terminal') return theirs
+    const view = await currentBanner($)
+    if (view === null) return theirs
+    const now = await currentActivity($)
+    const width = (e.viewport?.columns ?? UNMEASURED_COLUMNS) - HINT_INSET
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {theirs}
+        {bandRow($, e, bandLine(view, now, width - FRAME_WIDTH), now, width)}
+      </Box>
+    )
+  })
+
+  // Elsewhere the band stays above the prompt, as the skin plugin's usage band does on the desktop: the engine's types
+  // say no surface but the terminal draws an addition to the hint line yet.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    if (e.surface === 'terminal' || e.props.hasSurvey) return next(e)
     const view = await currentBanner($)
     if (view === null) return next(e)
     const now = await currentActivity($)
-    const columns = e.props.bodyColumns
-    const { Box, Text } = $.ui.resolve(e)
-    const steps = stepSegments(view, columns).flatMap((segment, index) => [
-      ...(index > 0 ? [STEP_GAP] : []),
-      segment.isCurrent ? (
-        <Text weight="bold" color="suggestion">
-          {segment.label}
-        </Text>
-      ) : (
-        <Text dimColor>{segment.label}</Text>
-      ),
-    ])
-    const detail = detailLine(view, now, columns)
-    return (
-      <Box flexDirection="column">
-        <Text wrap="truncate-end">{steps}</Text>
-        <Text wrap="truncate-end">
-          <Text dimColor>{detail.lead}</Text>
-          {now === 'waiting' ? <Text color="warning">{detail.activity}</Text> : <Text dimColor>{detail.activity}</Text>}
-        </Text>
-      </Box>
-    )
+    return bandRow($, e, bandLine(view, now, e.props.bodyColumns - FRAME_WIDTH), now)
   })
 }

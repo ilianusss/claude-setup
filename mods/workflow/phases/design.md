@@ -7,7 +7,7 @@ Goal: a `design.md` that settles how the approved spec (or, for a feature, the r
 
 ## With the user
 
-Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the workflow band shows where the user is.
 
 1. **Map.** A feature starts by offering to map the project, as the map agent section below says; on yes, `workflow:map` writes the Context section of `design.md`. A project, which starts from its spec, skips this step.
 2. **Research.** Spawn `workflow:design` to read the spec, the Context section when there is one, and the code the change touches, check versions and dependencies, and return the drivers it sees and the technical questions that matter. For a feature without a spec, it also drafts the "Problem and acceptance criteria" section: get it confirmed by the user first.

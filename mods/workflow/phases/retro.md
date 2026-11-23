@@ -7,7 +7,7 @@ Goal: what this workflow taught, turned into small changes to the setup so the n
 
 ## With the user
 
-Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the workflow band shows where the user is.
 
 1. **Gather the evidence:** the review findings, the corrections the user made during the workflow, the unlock entries in the state log (each says a test or a requirement was wrong), slices that took several sessions or got stuck, and where the build departed from `design.md`.
 2. **One proposal per pattern that happened more than once**, smallest first:

@@ -31,15 +31,17 @@ Every workflow starts with the intake, where you describe what you want in your 
 
 ## Following along
 
-While a workflow runs on the current branch, a band above the prompt shows where it stands, on two lines:
+While a workflow runs on the current branch, a band shows where it stands, as one line in a rounded border. On the terminal it sits in the footer under the prompt, full width, beside the skin plugin's usage band when that one shows (both mods keep what the other drew there); on the desktop it sits above the prompt. It shows from the start of a session in a workflow's worktree or on its branch, and right after `/workflow continue`:
 
 ```text
-intake  design  slice  build 2/5  inspect
-build 2/5: tests locked · opus medium · waiting for you
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ intake  design  slice  build 2/5  inspect │ build 2/5: tests locked · opus medium · waiting for you │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-- The first line lists the steps of this workflow in order: intake, setup while the project has no `.claude/workflow.json` (it leaves the line once written), spec and retro for a project. The current step is bold and coloured, the others dim, with no done markers. Build carries the slice count.
-- The second line is the current sub-step, the model and effort of whoever does it (the step's agent from the plan, or "conversation" for the intake and the retro), and "working" or "waiting for you". In a narrow terminal the band drops the steps before the current one, then shortens the sub-step, then the model: "waiting for you" always shows.
+- The steps of this workflow come first, in order: intake, setup while the project has no `.claude/workflow.json` (it leaves the band once written), spec and retro for a project. The finished steps are in the theme's success colour, the current one bold in its suggestion colour, the later ones dim, with no done markers. Build carries the slice count. The colours are the theme's names, so they follow `/theme`.
+- Then come the current sub-step, the model and effort of whoever does it (the step's agent from the plan, or "conversation" for the intake and the retro), and "working" (dim) or "waiting for you" (in the warning colour).
+- When the line does not fit, the band drops the steps before the current one behind "...", then those after it, then the list of steps (the sub-step names the current step too), then shortens the sub-step, then drops the model: "waiting for you" always shows.
 - The sub-steps are the numbered bold steps of the phase file's "With the user" section (`1. **Read**` gives "read"). Claude calls `mcp__workflow__progress { step }` as it starts each one; the mod saves it as `step` in the state, so a resumed workflow shows it and its prompt says to resume at that step, and clears it when the phase changes. It is refused out of range, from a step agent, and in build and inspect, whose sub-step the mod names itself: "writing tests", "tests locked", then "slice N verified" until the build agent's run ends; "review" in inspect, then "review round N/3" once a review round has ended.
 - "Working" runs from a submitted prompt to the end of the conversation's turn; "waiting for you" after it, and while one of the mod's dialogs or the Models panel is open. A step agent's turns do not change it.
 
