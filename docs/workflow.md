@@ -11,7 +11,7 @@ How to run a piece of work from idea to pull request with `/workflow`. The desig
 | Feature | Several slices in an existing project | `/workflow new`, size Feature: intake, design, slice, build, inspect |
 | Project | A new product, a large feature | `/workflow new`, size Project: intake, spec, design, slice, build, inspect, retro |
 
-Every workflow starts with the intake, where Claude asks what you want. In a project without `.claude/workflow.json`, the setup phase, which writes it, comes right after the intake.
+Every workflow starts with the intake, where you describe what you want in your own words and Claude asks only about what your description leaves out. In a project without `.claude/workflow.json`, the setup phase, which writes it, comes right after the intake.
 
 ## Commands
 
@@ -51,7 +51,7 @@ Every phase prompt also carries the "Leading the user" rules: Claude opens a pha
 
 | Phase | Claude writes | You approve |
 | --- | --- | --- |
-| intake | No file: it asks the problem, the result you want, how success will show, the limits and what is out of scope, restates it, and saves the goal you confirm in the state | The restated goal |
+| intake | No file: it invites you to describe what you want in your own words, then asks only about the points your description leaves out or leaves unclear (the problem and for whom, the result you want, how success will show, the limits, what is out of scope), never one you already answered, restates it, and saves the goal you confirm in the state | The restated goal |
 | setup | `.claude/workflow.json`, the project CLAUDE.md and settings, after running each command once | The three files |
 | spec | `docs/specs/<slug>/spec.md`: problem, users, scope, acceptance criteria in EARS, abuse cases | The spec, with no open question left |
 | design | `design.md`: for a feature, a Context section first when you accept the project map; drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
