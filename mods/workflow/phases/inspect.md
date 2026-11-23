@@ -7,7 +7,7 @@ Goal: an independent review of the whole branch, its blockers and majors fixed u
 
 ## With the user
 
-The mod follows this phase's steps itself and shows them above the prompt: do not call `mcp__workflow__progress` in it. It counts a review round each time a `workflow:review` run ends; the review rounds section below says how many have ended.
+The mod follows this phase's steps itself and shows them on the workflow band: do not call `mcp__workflow__progress` in it. It counts a review round each time a `workflow:review` run ends; the review rounds section below says how many have ended.
 
 1. **Review in fresh contexts:**
    - Spawn `workflow:review` in the foreground with the base branch and the lenses: spec and quality always, security when the change touches a surface in the trigger table of `writing-secure-code`. It reads this workflow's documents, returns findings and never edits.

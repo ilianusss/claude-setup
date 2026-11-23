@@ -12,7 +12,7 @@ export type WorkflowPicker = {
 
 export type WorkflowActivity = 'working' | 'waiting'
 
-// What the band above the prompt and the status line draw, computed from the state file each time the mod changes it.
+// What the band and the status line draw, computed from the state file each time the mod changes it.
 // A sub-step has a number in the phases the conversation leads, and only a name in build and inspect, which the mod
 // names itself.
 export type WorkflowBanner = {

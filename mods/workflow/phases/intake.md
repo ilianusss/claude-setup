@@ -7,7 +7,7 @@ Goal: what the user wants from this workflow, in their words and agreed by them.
 
 ## With the user
 
-Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the band above the prompt shows where the user is.
+Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the workflow band shows where the user is.
 
 1. **Read** the workflow title, and the project CLAUDE.md and README when you do not know the project yet, so you ask only what only the user knows.
 2. **Listen.** Invite the user to describe, in their own words, what they want from this workflow: one open question, with no list of points to answer. Then wait for their description.

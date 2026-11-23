@@ -294,8 +294,19 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     return { value: undefined }
   })
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
+  on('ui.render', { component: 'PromptHint' }, ($, e) => $.ui.resolve(e).Text({ dimColor: true, children: e.props.hint }))
   return fake
 }
+
+export const HINT_LINE = '? for shortcuts'
+
+export const PROMPT_HINT = {
+  plugin: 'workflow',
+  component: 'PromptHint',
+  props: { isDraft: false, isWorking: false, hint: HINT_LINE },
+  viewport: { columns: 105, rows: 40 },
+  surface: 'terminal',
+} as const
 
 export function stateText(fields: Partial<Record<string, string>> = {}): string {
   const data = {

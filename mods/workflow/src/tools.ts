@@ -119,7 +119,7 @@ const TOOLS: readonly RegisteredToolSpec[] = [
   {
     name: 'progress',
     description:
-      "Tell the user which numbered step of the current phase's \"With the user\" section you are starting. The band above the prompt shows it. Not in build or inspect, whose steps the mod follows itself.",
+      "Tell the user which numbered step of the current phase's \"With the user\" section you are starting. The workflow band shows it. Not in build or inspect, whose steps the mod follows itself.",
     inputSchema: {
       type: 'object',
       properties: {
