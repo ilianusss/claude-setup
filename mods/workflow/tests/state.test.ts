@@ -18,6 +18,7 @@ const WORKFLOW: Workflow = {
   technical: false,
   commits: true,
   autoNext: false,
+  keepDocs: 'specs',
   models: { ...DEFAULT_PLAN, build: { model: 'haiku', effort: 'low' }, review: { model: 'sonnet', effort: 'xhigh' } },
   paths: ['src/auth', 'src/api'],
   session: 's1',
@@ -61,6 +62,18 @@ describe('the state file', () => {
     const workflow = parseWorkflow(stateText({ models: '[build fable low, review opus max]' }))
 
     expect(workflow.models).toEqual(DEFAULT_PLAN)
+  })
+
+  test('writes the documents to keep as keep_docs', () => {
+    expect(renderWorkflow(WORKFLOW)).toContain('\nkeep_docs: specs\n')
+  })
+
+  test('a file without keep_docs keeps every document', () => {
+    expect(parseWorkflow(stateText()).keepDocs).toBe('all')
+  })
+
+  test('refuses an unknown keep_docs', () => {
+    expect(() => parseWorkflow(stateText({ keep_docs: 'some' }))).toThrow('keep_docs')
   })
 
   test('refuses a file with an unknown phase', () => {

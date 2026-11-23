@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { ADOPT, RETRO, SWITCH } from '../src/labels'
+import { ADOPT, SWITCH } from '../src/labels'
 import { parseWorkflow } from '../src/state'
 import { DAY, NOW, ROOT, SLICES, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 
@@ -115,37 +115,6 @@ describe('closing and pausing', () => {
 
     expect(state(fake.files).status).toBe('paused')
     expect(fake.prompts[0]).toContain('mcp__workflow__handoff')
-  })
-
-  test('/workflow done on a project offers the retro first', async ($, on) => {
-    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ size: 'project', phase: 'inspect' }) }), 'feat/login')
-    fake.answers.push(RETRO.run)
-    await start($)
-
-    await run($, 'done login')
-    await fake.clock.settle()
-
-    expect(state(fake.files).phase).toBe('retro')
-    expect(fake.prompts[0]).toContain('The retro phase')
-  })
-
-  test('/workflow done closes a feature', async ($, on) => {
-    const fake = fakeEngine(on, buildRepo({ [`${STATE_DIR}/login.md`]: stateText({ phase: 'inspect' }) }), 'feat/login')
-    await start($)
-
-    await run($, 'done login')
-
-    expect(state(fake.files)).toMatchObject({ status: 'done', phase: 'done' })
-  })
-
-  test('/workflow abandon closes it with the reason', async ($, on) => {
-    const fake = fakeEngine(on, buildRepo(), 'feat/login')
-    await start($)
-
-    await run($, 'abandon login the feature was dropped')
-
-    expect(state(fake.files).status).toBe('abandoned')
-    expect(state(fake.files).log.join('\n')).toContain('abandoned: the feature was dropped')
   })
 })
 

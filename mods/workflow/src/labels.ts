@@ -24,6 +24,15 @@ export const COMMITS = {
   no: 'No, I commit myself',
 }
 
+export const DOCS = {
+  question:
+    'Which documents should stay once the workflow is done? The spec, design, slices and ADRs are kept until the end either way, and removed in the closing.',
+  all: 'Keep everything',
+  specs: 'Remove the spec and ADRs',
+  code: 'Keep only the code',
+  ask: 'Choose at the end',
+}
+
 export const CHAINING = {
   question: 'Start the next slice without asking, once a slice is verified?',
   yes: 'Yes, go straight on',
@@ -75,8 +84,25 @@ export const GATE = {
   wait: 'Not yet',
   notAsked: (phase: Phase) => `Technical decisions are off, so the user was not asked at the ${phase} gate: the workflow moved on as if they chose Continue.`,
 }
+// The options Claude offers in the closing's publish question; each drops the parts already done.
+export const PUBLISH = {
+  all: 'Commit, push and open the pull request',
+  push: 'Commit and push',
+  commit: 'Commit only',
+  nothing: 'Nothing',
+}
+
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
-export const RETRO = { run: 'Run the retro first', close: 'Close now' }
+export const DELETE = {
+  question: (slug: string, status: string) =>
+    `Delete the workflow "${slug}" (${status})? Its state, test lock and run log are deleted, so /workflow no longer lists it. Committed files and the pushed branch stay.`,
+  yes: 'Delete it',
+  no: 'Cancel',
+  blocked: (worktree: string, reason: string) =>
+    `The worktree ${worktree} cannot be removed: ${reason}. Delete the workflow anyway and keep the worktree? Once it is deleted, the mod no longer offers the removal.`,
+  anyway: 'Delete it, keep the worktree',
+  cancel: 'Cancel',
+}
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }
 
 const IGNORED_SHOWN = 5
@@ -102,6 +128,6 @@ export const PRODUCES: Readonly<Record<Exclude<Phase, 'done'>, string>> = {
   design: 'design.md: the options, the chosen one and why',
   slice: 'slices.md: the work cut into slices that each ship on their own',
   build: 'each slice, built test-first with its tests locked',
-  inspect: 'a review of the branch, the fixes the user picks and a pull request draft',
-  retro: 'small changes to the setup, from what this workflow taught',
+  inspect: 'a review of the branch, the fixes the user picks and, for a feature, the closing: the pull request and the documents the user drops',
+  retro: 'small changes to the setup, from what this workflow taught, then the closing: the pull request and the documents the user drops',
 }

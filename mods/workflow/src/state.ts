@@ -8,10 +8,13 @@ export type Phase = (typeof PHASES)[number]
 export type Size = 'feature' | 'project'
 export type Status = 'active' | 'paused' | 'done' | 'abandoned'
 export type Prompting = 'all' | 'major'
+// Which documents the closing removes: none, the spec folder and ADRs, every non-code file the branch added, or the user picks.
+export type KeepDocs = 'all' | 'specs' | 'code' | 'ask'
 
 const SIZES: readonly Size[] = ['feature', 'project']
 const STATUSES: readonly Status[] = ['active', 'paused', 'done', 'abandoned']
 const PROMPTINGS: readonly Prompting[] = ['all', 'major']
+const KEEP_DOCS: readonly KeepDocs[] = ['all', 'specs', 'code', 'ask']
 const SEQUENCES: Readonly<Record<Size, readonly Phase[]>> = {
   feature: ['intake', 'design', 'slice', 'build', 'inspect', 'done'],
   project: ['intake', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
@@ -35,6 +38,7 @@ export type Workflow = {
   technical: boolean
   commits: boolean
   autoNext: boolean
+  keepDocs: KeepDocs
   models: ModelPlan
   paths: string[]
   session: string
@@ -71,6 +75,11 @@ function promptingOf(data: Frontmatter): Prompting {
 
 function technicalOf(data: Frontmatter): boolean {
   return data.technical === undefined || flag(data, 'technical')
+}
+
+// A workflow saved before the documents question existed kept every document.
+function keepDocsOf(data: Frontmatter): KeepDocs {
+  return data.keep_docs === undefined ? 'all' : oneOf(data, 'keep_docs', KEEP_DOCS)
 }
 
 function positive(data: Frontmatter, key: string): number | undefined {
@@ -134,6 +143,7 @@ export function parseWorkflow(markdown: string): Workflow {
     technical: technicalOf(data),
     commits: flag(data, 'commits'),
     autoNext: flag(data, 'auto_next'),
+    keepDocs: keepDocsOf(data),
     models: parsePlan(list(data, 'models')),
     paths: list(data, 'paths'),
     session: text(data, 'session'),
@@ -171,6 +181,7 @@ export function renderWorkflow(workflow: Workflow): string {
     technical: workflow.technical ? 'yes' : 'no',
     commits: workflow.commits ? 'yes' : 'no',
     auto_next: workflow.autoNext ? 'yes' : 'no',
+    keep_docs: workflow.keepDocs,
     models: renderPlan(workflow.models),
     paths: workflow.paths,
     session: workflow.session,

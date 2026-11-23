@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Config } from './config'
 import { pipelineOf, readDoc, readSlices, specsFolder } from './context'
 import type { Context } from './context'
-import { PRODUCES } from './labels'
+import { PRODUCES, PUBLISH } from './labels'
 import { STEP_SOURCES, readPhase, stepOf, stepsOf } from './phases'
 import type { PhaseDoc } from './phases'
 import { DEFAULT_PLAN, describeChoice } from './plan'
@@ -204,8 +204,40 @@ function reviewRounds(workflow: Workflow): string | undefined {
     ...(workflow.technical
       ? []
       : [
-          '- Technical decisions are off: in step 4, do not ask which minor findings to fix. Have the ones you recommend fixed, put the others in the pull request body as known issues, and tell the user in one line which were fixed.',
+          '- Technical decisions are off: in step 4, do not ask which minor findings to fix. Have the ones you recommend fixed, write the others under `## Known issues` in `design.md` for the pull request body, and tell the user in one line which were fixed.',
         ]),
+  ].join('\n')
+}
+
+const ADDED_FILES = '`git diff --name-only --diff-filter=A <base>...HEAD` (the base branch this branch started from) and `git ls-files --others --exclude-standard`'
+
+function removal(workflow: Workflow, specs: string): string {
+  const tracked = 'Use `git rm` for a tracked file and `rm` for an untracked one.'
+  switch (workflow.keepDocs) {
+    case 'all':
+      return 'Documents: this workflow keeps them all. Remove no document.'
+    case 'specs':
+      return `Remove this workflow's documents: \`${specs}/\` and the ADRs this branch added in \`docs/adr/\` (\`git diff --name-only --diff-filter=A <base>...HEAD -- docs/adr/\`, and any untracked one). ${tracked} Every other file stays, other documentation included.`
+    case 'code':
+      return `Remove every non-code file this branch added, so only the code remains: list them with ${ADDED_FILES}. That takes \`${specs}/\`, the ADRs in \`docs/adr/\`, any other new documentation, and \`.claude/workflow.json\`, the project \`CLAUDE.md\` and \`.claude/settings.json\` when this branch added them. ${tracked} A file that already existed on the base branch and was only edited stays: name those to the user, and never revert them. Keep a file the code needs (a fixture, a config it reads) and say so.`
+    case 'ask':
+      return `List the non-code files this branch added (${ADDED_FILES}): \`${specs}/\`, the ADRs, other documentation, and the setup files when this branch added them. Ask the user which to keep in one AskUserQuestion with \`multiSelect\`, one option per file or folder, then remove the others. ${tracked} Files that existed on the base branch and were only edited are not in the list: never revert them.`
+  }
+}
+
+function closing(context: Context, workflow: Workflow): string | undefined {
+  if (workflow.phase !== pipelineOf(context, workflow).at(-1)) return undefined
+  const specs = specsFolder(context, workflow)
+  return [
+    '## Closing the workflow',
+    '',
+    'This is the last phase. Once its other steps are done, close the workflow in this order instead of pushing earlier, then approve:',
+    '',
+    `1. **Draft the pull request** with \`following-git-conventions\`: title, What, Test, and Known issues from the \`## Known issues\` section of \`${specs}/design.md\` when it has any. Read it now: the next step may remove it. Do not push yet.`,
+    `2. **Remove documents.** ${removal(workflow, specs)}`,
+    `3. **Ask what to publish** in one AskUserQuestion, always asked whatever the settings, your recommended option first: "${PUBLISH.all}", "${PUBLISH.push}", "${PUBLISH.commit}", "${PUBLISH.nothing}". Leave out the parts already done: the commit when \`git status --porcelain\` is empty, the push when the branch has an upstream with nothing to push, the pull request when \`gh pr view\` finds one. Show the draft with the question.`,
+    `4. **Publish what they chose:** commit what is uncommitted, the document removal included, with \`following-git-conventions\`; push with \`git push -u origin ${workflow.branch}\`; open the pull request with \`gh pr create\` and the draft, and give the user its link.`,
+    '5. **Approve.** Call `mcp__workflow__advance`. The mod then offers to remove the worktree and the local branch, only when nothing is uncommitted and the branch is pushed.',
   ].join('\n')
 }
 
@@ -291,6 +323,7 @@ export async function phasePrompt(
     mapAgent(workflow),
     agentPart(workflow, step),
     reviewRounds(workflow),
+    closing(context, workflow),
     standing(workflow),
     files($, specsFolder(context, workflow)),
     isBuilding ? await sliceNamed($, context, workflow) : undefined,

@@ -18,6 +18,7 @@ Call `mcp__workflow__progress` with a step's number when you start each numbered
 3. **Show the proposals** with the evidence for each, and let the user pick (AskUserQuestion, multiSelect).
 4. **Apply the picked ones** following `editing-claude-setup`. Changes in `~/.claude` are files outside this repo: apply them, and leave committing them to the user unless they ask.
 5. **Close the loop on the design:** fill "What changed from the design" in `design.md`.
-6. **Approval.** Call `mcp__workflow__advance` to close the workflow.
+6. **Close.** Follow the "Closing the workflow" section of this prompt: the pull request draft, the documents the user chose to drop, and whether to commit, push and open the pull request.
+7. **Approval.** Call `mcp__workflow__advance` to close the workflow. The mod then offers to remove the worktree once it is clean and pushed.
 
 A proposal names the behaviour it should change. "Be more careful with X" changes nothing; "before Y, check Z" does.

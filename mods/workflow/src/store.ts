@@ -70,6 +70,25 @@ function lockPath(paths: Paths, slug: string): string {
   return `${paths.locks}/${slug}.json`
 }
 
+// The slug names the files rm deletes: a separator or a leading dot would reach outside the state folder.
+const PLAIN_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+export function isPlainSlug(slug: string): boolean {
+  return PLAIN_SLUG.test(slug)
+}
+
+// The index keys a workflow by the checkout that saved it, its worktree or the main checkout: `roots` names them all.
+export async function deleteWorkflow($: EngineInterface, paths: Paths, slug: string, roots: readonly string[]): Promise<void> {
+  if (!isPlainSlug(slug)) throw new Error(`"${slug}" is not a plain file name`)
+  const files = [`${paths.dir}/${slug}.md`, lockPath(paths, slug), `${paths.runs}/${slug}.json`]
+  const removed = await $.process.run(['rm', '-f', '--', ...files])
+  if (removed.exitCode !== 0) throw new Error(`rm could not delete the files of "${slug}": ${removed.stderr.trim()}`)
+  await $.store.delete(`lock:${lockPath(paths, slug)}`)
+  const index = await readIndex($)
+  for (const [key, entry] of Object.entries(index)) if (entry.slug === slug && roots.includes(entry.root)) delete index[key]
+  await $.store.set(INDEX_KEY, index)
+}
+
 export async function readLock($: EngineInterface, paths: Paths, slug: string): Promise<Lock | undefined> {
   const path = lockPath(paths, slug)
   let text: string

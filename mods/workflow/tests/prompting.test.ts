@@ -2,7 +2,7 @@ import type { AgentSpec } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { ADOPT, BRANCH, CHAINING, COMMITS, GATE, MODELS, PROMPTING, RETRO, SIZE, TECHNICAL } from '../src/labels'
+import { ADOPT, BRANCH, CHAINING, COMMITS, DELETE, DOCS, GATE, MODELS, PROMPTING, SIZE, TECHNICAL } from '../src/labels'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow, renderWorkflow } from '../src/state'
 import type { Phase } from '../src/state'
@@ -83,7 +83,7 @@ describe('the prompting settings in the state', () => {
 describe('/workflow new asks the prompting settings', () => {
   test('saves the prompting level and the technical decisions it was given', async ($, on) => {
     const fake = fakeEngine(on, WITH_CONFIG)
-    fake.answers.push(SIZE.feature, PROMPTING.major, TECHNICAL.yes, COMMITS.yes, CHAINING.no)
+    fake.answers.push(SIZE.feature, PROMPTING.major, TECHNICAL.yes, COMMITS.yes, DOCS.all, CHAINING.no)
     await start($)
 
     await run($, 'new Add login')
@@ -93,19 +93,19 @@ describe('/workflow new asks the prompting settings', () => {
 
   test('with technical decisions off, does not ask about the next slice and chains the slices', async ($, on) => {
     const fake = fakeEngine(on, WITH_CONFIG)
-    fake.answers.push(SIZE.feature, PROMPTING.all, TECHNICAL.no, COMMITS.no)
+    fake.answers.push(SIZE.feature, PROMPTING.all, TECHNICAL.no, COMMITS.no, DOCS.all)
     await start($)
 
     await run($, 'new Add login')
 
-    expect(fake.questions).toEqual([SIZE.question('Add login'), PROMPTING.question, TECHNICAL.question, COMMITS.question])
+    expect(fake.questions).toEqual([SIZE.question('Add login'), PROMPTING.question, TECHNICAL.question, COMMITS.question, DOCS.question])
     expect(parseWorkflow(fake.files.get(`${STATE_DIR}/add-login.md`) ?? '')).toMatchObject({ prompting: 'all', technical: false, autoNext: true })
   })
 
   test('with technical decisions off, still asks for the branch in a free linked worktree', async ($, on) => {
     const fake = fakeEngine(on, WITH_CONFIG)
     fake.isLinked = true
-    fake.answers.push(SIZE.feature, PROMPTING.major, TECHNICAL.no, COMMITS.no, BRANCH.create('feat/add-login'))
+    fake.answers.push(SIZE.feature, PROMPTING.major, TECHNICAL.no, COMMITS.no, DOCS.all, BRANCH.create('feat/add-login'))
     await start($)
 
     await run($, 'new Add login')
@@ -218,14 +218,13 @@ describe("the intake's gate with technical decisions off", () => {
 })
 
 describe('what stays asked with technical decisions off', () => {
-  test('/workflow done on a project still offers the retro', async ($, on) => {
+  test('/workflow delete still asks its confirmation', async ($, on) => {
     const fake = fakeEngine(on, inPhase('inspect', { size: 'project', technical: 'no' }), 'feat/login')
-    fake.answers.push(RETRO.close)
     await start($)
 
-    await run($, 'done login')
+    await run($, 'delete login')
 
-    expect(fake.questions).toEqual(['Run the retro of "login" before closing it?'])
+    expect(fake.questions).toEqual([DELETE.question('login', 'active')])
   })
 })
 

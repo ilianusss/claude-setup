@@ -19,14 +19,13 @@ Every workflow starts with the intake, where you describe what you want in your 
 | --- | --- |
 | `/workflow` | The workflows of this repo: phase, slice, status, age, which one is on the current branch |
 | `/workflow all` | Open workflows in every repo on this machine |
-| `/workflow new <title>` | Asks the size, the prompting level and the technical decisions (see What you are asked), whether to commit after each slice and whether to start the next slice without asking (`auto_next`, not asked when technical decisions are off), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
+| `/workflow new <title>` | Asks the size, the prompting level and the technical decisions (see What you are asked), whether to commit after each slice, which documents stay once the workflow is done (see The closing) and whether to start the next slice without asking (`auto_next`, not asked when technical decisions are off), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
 | `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named, with the prompt of the phase it stopped in (after a "Stop here", for one), which names the saved sub-step to resume at; offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
 | `/workflow next` | Clears the context, then continues: only needed to resume by hand in a fresh context, since gates and slices go on by themselves |
 | `/workflow pause` | Claude writes the handoff, then stops |
 | `/workflow models` | Opens the Models panel for the workflow on this branch, its current plan preselected, to change each step's model and effort at any time |
 | `/workflow unlock <file> <reason>` | You unlock a locked test yourself |
-| `/workflow done <slug>` | Closes it; a project is offered its retro first. Then offers to remove the worktree and the local branch once they are clean and pushed (see The ending) |
-| `/workflow abandon <slug> <reason>` | Closes it with the reason |
+| `/workflow delete [slug]` | Deletes a workflow, done or not, after a confirmation: first offers to remove its worktree and local branch when they still exist (see The ending), then deletes its state, test lock and run log, so `/workflow` no longer lists it. It replaces `done` and `abandon` |
 | `/workflow adopt` | Sets up a project without `workflow.json`, and rebuilds workflows from spec folders whose state was lost (a fresh clone). The phase follows the documents there; a folder without `spec.md`, `design.md` or `slices.md` starts again at the intake |
 
 ## Following along
@@ -70,7 +69,7 @@ The phase prompt and every step agent's prompt carry the two settings in a short
 
 Two questions Claude asks in chat change with it too, through the prompt: the inspect prompt says to fix the recommended minor findings without asking, and the design prompt says to map a feature without asking.
 
-Always asked, whatever the settings: the unlock of a locked test, the push of the branch and the pull request, the removal of the worktree and branch, the branch at `/workflow new`, the retro offer at `/workflow done`, and every command you type.
+Always asked, whatever the settings: the unlock of a locked test, the documents to keep, the commit, push and pull request of the closing, the removal of the worktree and branch, the branch at `/workflow new`, the confirmation of `/workflow delete`, and every command you type.
 
 ## The phases
 
@@ -82,7 +81,7 @@ Always asked, whatever the settings: the unlock of a locked test, the push of th
 | design | `design.md`: for a feature, a Context section first when you accept the project map; drivers, two or three options and the decision, components, data, contracts, security, tests, rollout, risks; ADRs | The option and the design |
 | slice | `slices.md`: a walking skeleton first, then one behaviour per slice | The slices and their criteria |
 | build | Code and tests, one `workflow:build` agent run per slice | Nothing: each slice closes when the mod has seen it green |
-| inspect | Review rounds until no blocker or major is left, the minor fixes you pick, a pull request draft | What to do when 3 rounds were not enough, the minors to fix, the push and the pull request |
+| inspect | Review rounds until no blocker or major is left, the minor fixes you pick, the findings left under `## Known issues` in `design.md`; for a feature, the closing | What to do when 3 rounds were not enough, the minors to fix; for a feature, the closing's questions |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
 A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. With technical decisions off, the gate of a technical phase goes on as if you chose Continue (What you are asked). "Continue" moves the phase, makes the workflow active again if it was paused, and the next phase starts in the same conversation: Claude ends its turn and the mod sends the next phase's prompt in a message of its own, because the step agents it registers again at the gate can only be spawned from the next turn on; "Stop here" moves it, pauses the workflow (`/workflow` lists it as paused) and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance`, `mcp__workflow__handoff` and `mcp__workflow__unlock`: the mod refuses them from a step agent.
@@ -136,24 +135,54 @@ The mod counts the rounds: each time a `workflow:review` run ends with its repor
 
 **Fixes in inspect run without the test lock.** `mcp__workflow__lock` and `mcp__workflow__verify` belong to the build phase and stay refused in inspect. In this phase the `workflow:build` agent's prompt replaces the slice with "Fixing review findings": for each finding, a failing test first (a bug found in review gets its failing test before its fix), seen to fail for the reason the finding names, then the smallest fix; then lint, typecheck and the full suite exactly as written, each result in its report. The next review round checks the fixes, tests included.
 
+## The closing
+
+`/workflow new` asks which documents stay once the workflow is done, saved as `keep_docs` in the state (a state file without it keeps everything):
+
+| Answer | `keep_docs` | Removed at the closing |
+| --- | --- | --- |
+| Keep everything | `all` | Nothing |
+| Remove the spec and ADRs | `specs` | `<specsDir>/<slug>/` and the ADRs this branch added in `docs/adr/`; other documentation stays |
+| Keep only the code | `code` | Every non-code file this branch added: the spec folder, the ADRs, other new documentation, and `.claude/workflow.json`, the project `CLAUDE.md` and `.claude/settings.json` when this branch added them |
+| Choose at the end | `ask` | The files you leave out when Claude lists the non-code files this branch added |
+
+The documents stay until the closing, since the inspect phase and the retro read them. A file that existed on the base branch and was only edited is never reverted. `.claude/workflow.json` goes only with "Keep only the code" and only when this branch added it: it holds the repo's commands for every workflow, so `/workflow delete` never touches it.
+
+The closing is a "Closing the workflow" section the mod adds to the prompt of the last phase, the inspect phase for a feature and the retro for a project, so a project's retro changes land in the same pull request. Claude follows it before approving that phase:
+
+1. Drafts the pull request with `following-git-conventions`, its known issues taken from `## Known issues` in `design.md`, where the inspect phase writes the findings left unfixed.
+2. Removes the documents `keep_docs` names, asking first with `ask`.
+3. Asks what to publish, in one question: "Commit, push and open the pull request", "Commit and push", "Commit only" or "Nothing", leaving out what is already done (nothing uncommitted, nothing to push, a pull request open).
+4. Does it, then calls `mcp__workflow__advance`: the gate closes the workflow and the ending below follows.
+
 ## The ending
 
-When the workflow closes (a feature's inspect gate, a project's retro gate, or `/workflow done <slug>`), the mod checks the worktree it created:
+When the workflow closes (a feature's inspect gate or a project's retro gate), and when `/workflow delete <slug>` runs, the mod checks the worktree it created:
 
 - no uncommitted change, untracked files included (`git status --porcelain`);
 - the branch has an upstream and nothing left to push (`git rev-list @{u}..HEAD` is empty).
 
-When both hold, it asks whether to remove the worktree and the local branch. The dialog names both, and the ignored files the removal deletes with the worktree, such as `.env` or `node_modules/` (the top-level entries of `git status --ignored`, five at most, then a count). When a check fails, it keeps both, says which check failed, and `/workflow done <slug>` asks again once that is fixed. A workflow that ran in the main checkout is offered nothing, and a default branch is never deleted.
+When both hold, it asks whether to remove the worktree and the local branch. The dialog names both, and the ignored files the removal deletes with the worktree, such as `.env` or `node_modules/` (the top-level entries of `git status --ignored`, five at most, then a count). When a check fails, it keeps both, says which check failed, and `/workflow delete <slug>` asks again once that is fixed. A workflow that ran in the main checkout, or whose worktree is gone, is offered nothing, and a default branch is never deleted.
 
 On "Remove them":
 
-- From a session in the main checkout (`/workflow done <slug>` there), the mod removes them directly.
+- From a session in the main checkout (`/workflow delete <slug>` there), the mod removes them directly.
 - Inside the worktree the session entered with `EnterWorktree`, Claude leaves it with `ExitWorktree` (`action: "keep"`), then calls `mcp__workflow__finish`. The tool is refused while the session is still inside the worktree, from a step agent, and without your yes in this session.
-- In a session that started inside the worktree, which `ExitWorktree` cannot leave, you are told to run `/workflow done <slug>` from a session in the main checkout.
+- In a session that started inside the worktree, which `ExitWorktree` cannot leave, you are told to run `/workflow delete <slug>` from a session in the main checkout.
 
 `ExitWorktree` with `action: "remove"` is refused, from the conversation or a step agent, while the session is inside the worktree of an open or done workflow, or entered one with `EnterWorktree` (whatever folder the shell has moved to since), and whenever git cannot resolve either repository: it would delete the worktree and its branch with none of these checks. The guard covers `ExitWorktree` only: a shell command that deletes a worktree, such as `git worktree remove --force` or `rm -rf`, is governed by the permission system.
 
-Whether the session is inside the worktree is decided from the top level git resolves for the session folder, not from its path, so a symbolic link or a nested repository cannot make it look outside; when git cannot resolve it, nothing is removed. The removal runs the checks again first and removes nothing if a change appeared since the dialog, including an ignored entry the dialog did not list. It runs `git worktree remove <path>` from the main checkout, without `--force`, then `git branch -D <branch>` only when `refs/heads/<branch>` points at its upstream's commit, so a tag of the same name cannot stand in; otherwise the branch stays and the answer says why. The state logs "worktree removed" and stays in the shared `.git`, so `/workflow` still lists the workflow as done.
+Whether the session is inside the worktree is decided from the top level git resolves for the session folder, not from its path, so a symbolic link or a nested repository cannot make it look outside; when git cannot resolve it, nothing is removed. The removal runs the checks again first and removes nothing if a change appeared since the dialog, including an ignored entry the dialog did not list. It runs `git worktree remove <path>` from the main checkout, without `--force`, then `git branch -D <branch>` only when `refs/heads/<branch>` points at its upstream's commit, so a tag of the same name cannot stand in; otherwise the branch stays and the answer says why. The state logs "worktree removed" and stays in the shared `.git`, so `/workflow` still lists the workflow as done until `/workflow delete` deletes it.
+
+`/workflow delete` asks for a confirmation first, naming the workflow and its status. Then:
+
+- With no worktree left to remove, it deletes the record.
+- On "Remove them", it removes the worktree and the branch, then deletes the record; from inside the worktree, `mcp__workflow__finish` deletes it after the removal, and the tool accepts a workflow that is not done only in this case.
+- On "Keep them", it keeps both and deletes the record.
+- Closing the removal question cancels the delete.
+- When the worktree cannot be removed (a failed check, a session started inside it), it asks whether to delete the record anyway and keep the worktree, since afterwards the mod can no longer offer the removal; Cancel deletes nothing.
+
+Deleting the record runs `rm -f` on `.git/claude-workflow/<slug>.md`, `locks/<slug>.json` and `runs/<slug>.json`, and drops the workflow from the `/workflow all` index and the mod's memory of its lock and model recommendations. A slug that is not a plain file name is refused. Committed files and the pushed branch stay.
 
 ## Several workflows at once
 

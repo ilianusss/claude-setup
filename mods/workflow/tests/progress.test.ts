@@ -135,6 +135,7 @@ describe('the saved sub-step', () => {
     technical: true,
     commits: false,
     autoNext: false,
+    keepDocs: 'all',
     models: DEFAULT_PLAN,
     paths: [],
     session: 's1',

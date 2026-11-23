@@ -102,6 +102,10 @@ export async function rememberRecommendations($: EngineInterface, slug: string, 
   await update($, remembered, kept => ({ ...kept, [slug]: [...recommendations] }))
 }
 
+export async function forgetRecommendations($: EngineInterface, slug: string): Promise<void> {
+  await update($, remembered, kept => Object.fromEntries(Object.entries(kept).filter(([key]) => key !== slug)))
+}
+
 export async function recommendationsFor($: EngineInterface, slug: string): Promise<Recommendation[]> {
   const parsed = parseRecommendations((await read($, remembered))[slug] ?? [], STEPS)
   return 'errors' in parsed ? [] : parsed.recommendations

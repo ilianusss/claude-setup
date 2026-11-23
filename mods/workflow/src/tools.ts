@@ -285,10 +285,10 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   await registerAgents($)
   const approved = notes === '' ? 'Approved:' : `${notes} Approved:`
   if (target === 'done') {
-    const closed = `${approved} "${workflow.slug}" is done.`
+    const closed = `${approved} "${workflow.slug}" is done. \`/workflow delete ${workflow.slug}\` deletes it from the list once the user no longer needs it.`
     const ending = await offerEnding($, runtime, context, moved, now)
     if (ending.kind === 'leave') return `${closed}\n\n${ending.prompt}`
-    return ending.text === '' ? closed : `${closed} ${ending.text}`
+    return ending.kind === 'cancelled' || ending.text === '' ? closed : `${closed} ${ending.text}`
   }
   if (isStopping) return `${approved} "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
   submitLater($, `The ${target} phase of "${workflow.slug}" starts now. Go on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`)
