@@ -1,0 +1,6 @@
+{
+  "name": "carve",
+  "version": "0.1.0",
+  "description": "/carve saves the conversation so far, prompts and answers, as a markdown file in .claude/carve.",
+  "author": { "name": "ilianusss" }
+}
