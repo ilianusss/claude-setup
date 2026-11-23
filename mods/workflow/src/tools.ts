@@ -10,8 +10,17 @@ import type { Context } from './context'
 import { GATE, MODELS } from './labels'
 import { readPhase, stepsOf } from './phases'
 import { chooseModels, rememberRecommendations, savePlan } from './picker'
-import { DEFAULT_PLAN, EFFORTS, MODELS as MODEL_NAMES, STEPS, parseRecommendations, withRecommendations } from './plan'
-import type { ModelPlan, Recommendation } from './plan'
+import {
+  DEFAULT_PLAN,
+  EFFORTS,
+  MODELS as MODEL_NAMES,
+  STEPS,
+  describeChangesFromDefaults,
+  describePlan,
+  parseRecommendations,
+  withRecommendations,
+} from './plan'
+import type { ModelPlan, Recommendation, Step } from './plan'
 import { NEXT_IN_ITS_OWN_TURN, phasePrompt, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
 import { finish, offerEnding, rememberEnteredWorktree } from './ending'
@@ -182,9 +191,23 @@ function recommendationsOf(context: Context, workflow: Workflow, input: Record<s
   return parsed.recommendations
 }
 
-async function askPlan($: EngineInterface, workflow: Workflow, recommendations: readonly Recommendation[]): Promise<ModelPlan | 'per step'> {
+function planQuestion(steps: readonly Step[], recommendations: readonly Recommendation[]): string {
+  const lines = [MODELS.defaultPlan(describePlan(DEFAULT_PLAN, steps))]
+  if (recommendations.length > 0) {
+    const changes = describeChangesFromDefaults(withRecommendations(DEFAULT_PLAN, recommendations), steps)
+    lines.push(changes === '' ? MODELS.recommendedAreDefaults : MODELS.recommendedChanges(changes))
+  }
+  return `${MODELS.question}\n\n${lines.join('\n')}`
+}
+
+async function askPlan(
+  $: EngineInterface,
+  workflow: Workflow,
+  steps: readonly Step[],
+  recommendations: readonly Recommendation[],
+): Promise<ModelPlan | 'per step'> {
   const options = recommendations.length > 0 ? [MODELS.defaults, MODELS.recommended, MODELS.perStep] : [MODELS.defaults, MODELS.perStep]
-  const answer = await askOrUndefined($, MODELS.question, options, 'Models')
+  const answer = await askOrUndefined($, planQuestion(steps, recommendations), options, 'Models')
   if (answer === MODELS.perStep) return 'per step'
   if (answer === MODELS.recommended) return withRecommendations(DEFAULT_PLAN, recommendations)
   if (answer === MODELS.defaults) return DEFAULT_PLAN
@@ -228,7 +251,8 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   }
 
   const isStopping = answer === GATE.stop
-  const choice = workflow.phase === 'intake' ? await askPlan($, workflow, recommendations) : workflow.models
+  const choice =
+    workflow.phase === 'intake' ? await askPlan($, workflow, stepsOf(workflow, context.config === undefined), recommendations) : workflow.models
   const status = target === 'done' ? 'done' : isStopping ? 'paused' : 'active'
   let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
   await saveWorkflow($, context.repo, context.paths, moved)

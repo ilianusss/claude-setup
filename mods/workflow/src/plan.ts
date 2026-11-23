@@ -64,6 +64,23 @@ export function isSameChoice(a: ModelChoice, b: ModelChoice): boolean {
   return a.model === b.model && a.effort === b.effort
 }
 
+export function describePlan(plan: ModelPlan, steps: readonly Step[]): string {
+  const groups: Array<{ choice: ModelChoice; steps: Step[] }> = []
+  for (const step of steps) {
+    const group = groups.find(candidate => isSameChoice(candidate.choice, plan[step]))
+    if (group === undefined) groups.push({ choice: plan[step], steps: [step] })
+    else group.steps.push(step)
+  }
+  return groups.map(group => `${group.steps.join(', ')} on ${describeChoice(group.choice)}`).join('; ')
+}
+
+export function describeChangesFromDefaults(plan: ModelPlan, steps: readonly Step[]): string {
+  return steps
+    .filter(step => !isSameChoice(plan[step], DEFAULT_PLAN[step]))
+    .map(step => `${step} on ${describeChoice(plan[step])} (default ${describeChoice(DEFAULT_PLAN[step])})`)
+    .join('; ')
+}
+
 export function parseChoice(text: string): ModelChoice | undefined {
   const [modelName, effortName, ...rest] = text.trim().toLowerCase().split(/\s+/)
   const model = oneOf(modelName, MODELS)

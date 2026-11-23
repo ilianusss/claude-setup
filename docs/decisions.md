@@ -130,3 +130,8 @@ Dated one-line entries: what was decided and why. Newest last. Add one whenever 
 ## 2026-11-23: the intake starts from the user's description
 
 - **The intake invites the user's own description first, then asks only about the points it leaves out or leaves unclear**, replacing five fixed questions asked up front: the user found the form asked too much and made them repeat what they had already said. The five points (problem and for whom, result, how success shows, limits, out of scope) stay the checklist and the shape of the restatement, and a point the user clearly does not care about is restated as "not stated" rather than pressed.
+
+## 2026-11-23: the model choice shows the defaults
+
+- **The model question at the intake's gate lists the default plan and what Claude's recommendations change**, built from `DEFAULT_PLAN` and the steps this workflow runs: the user did not remember the defaults, so "Use the defaults" and "Use Claude's recommendations" could not be compared. `$.ui.ask` takes option labels only, with no description, so both lines go in the question under it; the labels stay short and fixed, since the answer is compared with them exactly.
+- **The Models panel lays out aligned Step, Model, Effort and Default columns**, with the step name and "changed from <default>" in the theme's suggestion colour on a row that differs, and a recommendation line only under the steps Claude recommended: the panel was usable but read as a list, and a "No recommendation" line on every other step was noise. The width at which the columns show is now computed from them, so the Default column never wraps; a narrower pane keeps the stacked layout, and the one-dialog-per-step fallback is unchanged.

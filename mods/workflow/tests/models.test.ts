@@ -4,7 +4,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { GATE, MODELS } from '../src/labels'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow } from '../src/state'
-import { STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
@@ -38,6 +38,10 @@ function recordOptions(on: On): string[][] {
   return offered
 }
 
+function withoutConfig(files: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(files).filter(([path]) => path !== `${ROOT}/.claude/workflow.json`))
+}
+
 function hasModelsLog(fake: Fake): boolean {
   return state(fake).log.some(entry => entry.includes('models changed'))
 }
@@ -51,8 +55,63 @@ describe('the model question at the intake gate', () => {
 
     await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
 
-    expect(fake.questions[1]).toBe('Which models should the steps use?')
+    expect(fake.questions[1]).toBe(
+      'Which models should the steps use?\n\n' +
+        'Defaults: map on sonnet medium; design, slice, review on opus high; build on opus medium.\n' +
+        'Claude recommends: build on sonnet high (default opus medium); review on opus xhigh (default opus high).',
+    )
     expect(offered[1]).toEqual(['Use the defaults', "Use Claude's recommendations", 'Choose per step'])
+  })
+
+  test('shows only the defaults when Claude gave no recommendation', async ($, on) => {
+    const fake = fakeEngine(on, INTAKE, 'feat/login')
+    fake.answers.push(GATE.continue, MODELS.defaults)
+    await start($)
+
+    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+
+    expect(fake.questions[1]).toBe(
+      'Which models should the steps use?\n\nDefaults: map on sonnet medium; design, slice, review on opus high; build on opus medium.',
+    )
+  })
+
+  test('lists only the steps this workflow runs among the defaults', async ($, on) => {
+    const project = withoutConfig(buildRepo({ [STATE_FILE]: stateText({ size: 'project', phase: 'intake', slice: '0' }) }))
+    const fake = fakeEngine(on, project, 'feat/login')
+    fake.answers.push(GATE.continue, MODELS.defaults)
+    await start($)
+
+    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+
+    expect(fake.questions[1]).toContain('Defaults: setup on sonnet medium; spec, design, slice, review on opus high; build on opus medium.')
+  })
+
+  test('names only the recommendations that differ from the defaults', async ($, on) => {
+    const fake = fakeEngine(on, INTAKE, 'feat/login')
+    fake.answers.push(GATE.continue, MODELS.defaults)
+    await start($)
+
+    await $.tool.call({
+      tool: 'mcp__workflow__advance',
+      summary: SUMMARY,
+      recommendations: [{ step: 'design', model: 'opus', effort: 'high', reason: 'Two options to weigh.' }, RECOMMENDATIONS[0]],
+    })
+
+    expect(fake.questions[1]).toContain('\nClaude recommends: build on sonnet high (default opus medium).')
+  })
+
+  test('says when every recommendation is a default', async ($, on) => {
+    const fake = fakeEngine(on, INTAKE, 'feat/login')
+    fake.answers.push(GATE.continue, MODELS.defaults)
+    await start($)
+
+    await $.tool.call({
+      tool: 'mcp__workflow__advance',
+      summary: SUMMARY,
+      recommendations: [{ step: 'build', model: 'opus', effort: 'medium', reason: 'The usual slices.' }],
+    })
+
+    expect(fake.questions[1]).toContain("\nClaude's recommendations are the defaults.")
   })
 
   test('leaves out the recommendations when Claude gave none', async ($, on) => {
@@ -73,7 +132,7 @@ describe('the model question at the intake gate', () => {
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
 
-    expect(fake.questions[1]).toBe(MODELS.question)
+    expect(fake.questions[1]).toMatch(/^Which models should the steps use\?/)
     expect(state(fake)).toMatchObject({
       phase: 'design',
       status: 'paused',
