@@ -14,7 +14,7 @@ const AGENT_TYPES: Record<string, string> = { r1: 'workflow:review', r2: 'workfl
 const BAND = {
   plugin: 'workflow',
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   surface: 'terminal',
 } as const
 

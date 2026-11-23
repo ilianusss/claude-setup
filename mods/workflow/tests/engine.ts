@@ -40,7 +40,7 @@ export const INTAKE_PHASE = `# The intake phase
 
 ## With the user
 
-1. **Ask** the user, in their words:
+1. **Ask** the user to describe, in their own words, what they want, then ask only about the points the description leaves out or leaves unclear:
    - The problem: what is wrong or missing today.
    - The result wanted: what exists once this workflow is done.
    - How success will show: what the user will see.

@@ -13,7 +13,7 @@ const INTAKE = buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0'
 const BAND = {
   plugin: 'workflow',
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   surface: 'terminal',
 } as const
 

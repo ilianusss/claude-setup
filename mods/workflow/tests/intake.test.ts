@@ -115,7 +115,7 @@ describe('a phase that lists no writes', () => {
 })
 
 describe('the intake prompt', () => {
-  test('asks the problem, the result, how success shows, the limits and the scope, then a restatement to confirm', async ($, on) => {
+  test("invites the user's own description first, then asks only the points it leaves out, then a restatement to confirm", async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     await start($)
 
@@ -123,7 +123,7 @@ describe('the intake prompt', () => {
     await fake.clock.settle()
 
     const prompt = fake.prompts[0] ?? ''
-    const order = ['The problem', 'The result wanted', 'How success will show', 'The limits', 'Out of scope', 'Restate', 'confirm']
+    const order = ['in their own words', 'leaves out', 'The problem', 'The result wanted', 'How success will show', 'The limits', 'Out of scope', 'Restate', 'confirm']
     const positions = order.map(phrase => prompt.indexOf(phrase))
     expect(positions.every(position => position >= 0)).toBe(true)
     expect([...positions].sort((a, b) => a - b)).toEqual(positions)
