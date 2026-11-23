@@ -36,6 +36,9 @@ export const SWITCH = {
 
 export const MODELS = {
   question: 'Which models should the steps use?',
+  defaultPlan: (plan: string) => `Defaults: ${plan}.`,
+  recommendedChanges: (changes: string) => `Claude recommends: ${changes}.`,
+  recommendedAreDefaults: "Claude's recommendations are the defaults.",
   defaults: 'Use the defaults',
   recommended: "Use Claude's recommendations",
   perStep: 'Choose per step',

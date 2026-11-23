@@ -26,6 +26,7 @@ const PANE = {
 const SURFACES = ['terminal', 'desktop'] as const
 const ALLOWED_MODELS = ['haiku', 'sonnet', 'opus']
 const ALLOWED_EFFORTS = ['low', 'medium', 'high', 'xhigh']
+const THEME_COLOURS = ['suggestion', 'warning']
 
 function state(fake: Fake) {
   return parseWorkflow(fake.files.get(STATE_FILE) ?? '')
@@ -137,6 +138,77 @@ describe('the model picker panel', () => {
       expect(changed).toHaveLength(1)
       expect(changed[0]?.text).toContain('opus medium')
       expect(changed[0]?.props.dimColor).not.toBe(true)
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, heads its columns Step, Model, Effort and Default, dimmed`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+
+      for (const heading of ['Step', 'Model', 'Effort', 'Default']) {
+        expect((await ui.find({ type: 'Text', text: new RegExp(`^${heading}$`) }))?.props.dimColor).toBe(true)
+      }
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, shows the default of each step left at its default, dimmed`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const defaults = await ui.findAll({ type: 'Text', text: /^opus high$/ })
+
+      expect(defaults).toHaveLength(2)
+      expect(defaults.map(found => found.props.dimColor)).toEqual([true, true])
+      expect((await ui.find({ type: 'Text', text: /^sonnet medium$/ }))?.props.dimColor).toBe(true)
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, draws the name of a step that differs from its default in the suggestion colour`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+
+      expect((await ui.find({ type: 'Text', text: /^build$/ }))?.props.color).toBe('suggestion')
+      expect((await ui.find({ type: 'Text', text: /^design$/ }))?.props.color).toBeUndefined()
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, shows a recommendation line only under the steps Claude recommended`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+
+      expect(await ui.findAll({ type: 'Text', text: /Claude/ })).toHaveLength(2)
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, colours its text with theme colour names only`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const colours = (await ui.findAll({ type: 'Text' })).map(found => found.props.color).filter(colour => colour !== undefined)
+
+      expect(colours.length).toBeGreaterThan(0)
+      expect(colours.filter(colour => !THEME_COLOURS.includes(String(colour)))).toEqual([])
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, on a narrow pane, leaves out the column headings, keeps each step and its pickers, and names the default in its cell`, async ($, on) => {
+      const fake = fakeEngine(on, INTAKE, 'feat/login')
+      await choosingAtIntake($, fake)
+
+      const ui = await $.ui.mount({ ...PANE, surface, props: { ...PANE.props, bodyColumns: 60 } })
+
+      expect(await ui.find({ type: 'Text', text: /^Default$/ })).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: /^build$/ })).toBeDefined()
+      expect(await ui.findAll({ type: 'Text', text: /^default opus high$/ })).toHaveLength(2)
+      expect(await ui.findAll({ type: 'Select' })).toHaveLength(10)
       await ui.unmount()
     })
 

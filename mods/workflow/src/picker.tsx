@@ -38,9 +38,12 @@ export const PICKER_PANE = 'workflow-models'
 const picker = atom({ plugin: 'workflow', key: 'picker' } as const, null, { shape: 'picker-1' })
 const remembered = atom({ plugin: 'workflow', key: 'recommendations' } as const, {}, { shape: 'recommendations-1' })
 
-const WIDE_COLUMNS = 80
 const STEP_WIDTH = 9
 const SELECT_WIDTH = 24
+const COLUMN_GAP = 1
+const PADDING = 1
+const DEFAULT_WIDTH = Math.max(...STEPS.map(step => changedFrom(DEFAULT_PLAN[step]).length))
+const WIDE_COLUMNS = 2 * PADDING + STEP_WIDTH + 2 * SELECT_WIDTH + DEFAULT_WIDTH + 3 * COLUMN_GAP
 const XHIGH_WARNING = "xhigh is for hard problems that high could not solve: it spends the plan's limits fastest."
 
 type Row = { step: Step; choice: ModelChoice; fallback: ModelChoice; recommendation: Recommendation | undefined }
@@ -227,10 +230,18 @@ function effortOptions(row: Row): Array<{ value: string; label: string }> {
   return EFFORTS.map(effort => ({ value: effort, label: effort === recommendedOf(row).effort ? `${effort} (${PICKER.recommended})` : effort }))
 }
 
-function recommendationLine(row: Row): string {
-  if (row.recommendation === undefined) return 'No recommendation from Claude for this step.'
-  const reason = row.recommendation.reason ? `: ${row.recommendation.reason}` : ''
-  return `Claude recommends ${describeChoice(row.recommendation)}${reason}`
+function recommendationLine(recommendation: Recommendation): string {
+  const reason = recommendation.reason ? `: ${recommendation.reason}` : ''
+  return `Claude recommends ${describeChoice(recommendation)}${reason}`
+}
+
+function changedFrom(fallback: ModelChoice): string {
+  return `changed from ${describeChoice(fallback)}`
+}
+
+// Wide, the Default heading names the column; narrow, the cell has no heading and says it itself.
+function defaultText(fallback: ModelChoice, isWide: boolean): string {
+  return isWide ? describeChoice(fallback) : `default ${describeChoice(fallback)}`
 }
 
 export function registerPicker(on: On): void {
@@ -252,8 +263,13 @@ export function registerPicker(on: On): void {
     const isWide = e.props.bodyColumns >= WIDE_COLUMNS
     const rows = rowsOf(state).map((row, index) => {
       const isChanged = !isSameChoice(row.choice, row.fallback)
-      const selects = (
-        <Box flexDirection="row" gap={1}>
+      const name = (
+        <Text weight="bold" color={isChanged ? 'suggestion' : undefined}>
+          {row.step}
+        </Text>
+      )
+      const cells = (
+        <Box flexDirection="row" gap={COLUMN_GAP}>
           <Box width={SELECT_WIDTH}>
             <Select
               key={`model-${row.step}`}
@@ -271,39 +287,41 @@ export function registerPicker(on: On): void {
               onSelect={value => pick($, row.step, 'effort', value)}
             />
           </Box>
-          {isChanged ? <Text color="suggestion">changed from {describeChoice(row.fallback)}</Text> : <Text dimColor>default</Text>}
+          <Box width={DEFAULT_WIDTH}>
+            {isChanged ? <Text color="suggestion">{changedFrom(row.fallback)}</Text> : <Text dimColor>{defaultText(row.fallback, isWide)}</Text>}
+          </Box>
         </Box>
       )
       return (
         <Box flexDirection="column">
           {isWide ? (
-            <Box flexDirection="row" gap={1}>
-              <Box width={STEP_WIDTH}>
-                <Text weight="bold">{row.step}</Text>
-              </Box>
-              {selects}
+            <Box flexDirection="row" gap={COLUMN_GAP}>
+              <Box width={STEP_WIDTH}>{name}</Box>
+              {cells}
             </Box>
           ) : (
             <Box flexDirection="column">
-              <Text weight="bold">{row.step}</Text>
-              {selects}
+              {name}
+              {cells}
             </Box>
           )}
-          <Box paddingLeft={isWide ? STEP_WIDTH + 1 : 0} flexDirection="column">
-            <Text dimColor wrap="truncate-end">
-              {recommendationLine(row)}
-            </Text>
+          <Box paddingLeft={isWide ? STEP_WIDTH + COLUMN_GAP : 0} flexDirection="column">
+            {row.recommendation !== undefined && (
+              <Text dimColor wrap="truncate-end">
+                {recommendationLine(row.recommendation)}
+              </Text>
+            )}
             {row.choice.effort === 'xhigh' && <Text color="warning">{XHIGH_WARNING}</Text>}
           </Box>
         </Box>
       )
     })
     return (
-      <Box flexDirection="column" paddingX={1}>
+      <Box flexDirection="column" paddingX={PADDING}>
         <Text weight="bold">Models for {state.slug}</Text>
         <Text dimColor>Each step of this workflow runs in its own agent, on the model and effort set here.</Text>
         {isWide && (
-          <Box flexDirection="row" gap={1} marginTop={1}>
+          <Box flexDirection="row" gap={COLUMN_GAP} marginTop={1}>
             <Box width={STEP_WIDTH}>
               <Text dimColor>Step</Text>
             </Box>
@@ -312,6 +330,9 @@ export function registerPicker(on: On): void {
             </Box>
             <Box width={SELECT_WIDTH}>
               <Text dimColor>Effort</Text>
+            </Box>
+            <Box width={DEFAULT_WIDTH}>
+              <Text dimColor>Default</Text>
             </Box>
           </Box>
         )}
