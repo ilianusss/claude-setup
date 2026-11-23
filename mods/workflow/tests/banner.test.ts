@@ -17,7 +17,7 @@ const DONE_MARKERS = /[✓✔✅]|\[x\]|\bdone\b/i
 const BAND = {
   plugin: 'workflow',
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 }, view: {} },
 } as const
 
 function repo(fields: Partial<Record<string, string>> = {}): Record<string, string> {
