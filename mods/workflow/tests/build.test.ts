@@ -147,6 +147,18 @@ describe('frozen tests', () => {
     expect(parseWorkflow(fake.files.get(`${STATE_DIR}/login.md`) ?? '').log.join('\n')).toContain('unlocked src/cart.test.ts: the spec says 31')
   })
 
+  test('unlock still asks the person when technical decisions are off', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest({ [`${STATE_DIR}/login.md`]: stateText({ technical: 'no', prompting: 'major' }) }), 'feat/login')
+    await start($)
+    await lockedSlice($, fake)
+    fake.answers.push(UNLOCK.no)
+
+    const unlocked = await $.tool.call({ tool: 'mcp__workflow__unlock', file: 'src/cart.test.ts', reason: 'the spec says 31' })
+
+    expect(fake.questions[0]).toContain('the spec says 31')
+    expect(resultText(unlocked)).toContain('kept src/cart.test.ts locked')
+  })
+
   test('unlock changes nothing when the person keeps it locked', async ($, on) => {
     const fake = fakeEngine(on, repoWithTest(), 'feat/login')
     await start($)
@@ -218,6 +230,16 @@ describe('the next slice', () => {
 
     expect(fake.commands).not.toContain('clear')
     expect(fake.prompts).toHaveLength(1)
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
+  })
+
+  test('with technical decisions off, verify submits the next slice without asking, even without auto_next', async ($, on) => {
+    const fake = fakeEngine(on, repoWithTest({ [`${STATE_DIR}/login.md`]: stateText({ technical: 'no', auto_next: 'no' }) }), 'feat/login')
+
+    await verifiedSlice($, fake)
+    await fake.clock.settle()
+
+    expect(fake.questions).toHaveLength(0)
     expect(fake.prompts[0]).toEqual(expect.stringMatching(/Spawn `workflow:build`[^\n]*slice 2/))
   })
 

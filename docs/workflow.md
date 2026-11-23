@@ -19,7 +19,7 @@ Every workflow starts with the intake, where you describe what you want in your 
 | --- | --- |
 | `/workflow` | The workflows of this repo: phase, slice, status, age, which one is on the current branch |
 | `/workflow all` | Open workflows in every repo on this machine |
-| `/workflow new <title>` | Asks the size, whether to commit after each slice and whether to start the next slice without asking (`auto_next`), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
+| `/workflow new <title>` | Asks the size, the prompting level and the technical decisions (see What you are asked), whether to commit after each slice and whether to start the next slice without asking (`auto_next`, not asked when technical decisions are off), then creates a worktree next to the repo on `feat/<slug>` and has Claude move the session into it (the `EnterWorktree` tool) and start the intake. If Claude cannot enter it, start a session there and run `/workflow continue <slug>`. In a linked worktree that runs no workflow yet, it asks for the branch instead and starts the intake there. Without a title, it puts `/workflow new ` in the prompt box for you to name it |
 | `/workflow continue [slug]` | Resumes the workflow of the current branch, or the one named, with the prompt of the phase it stopped in (after a "Stop here", for one), which names the saved sub-step to resume at; offers to switch branch; after 14 days away or when the branch is behind, starts with a drift check |
 | `/workflow next` | Clears the context, then continues: only needed to resume by hand in a fresh context, since gates and slices go on by themselves |
 | `/workflow pause` | Claude writes the handoff, then stops |
@@ -47,6 +47,29 @@ The status line carries the same data: `workflow login: build 2/5, opus medium, 
 
 Every phase prompt also carries the "Leading the user" rules: Claude opens a phase by saying where you are (step k of n), what it produces and what you will be asked; asks every decision that is yours in a dialog, its recommended option first; and ends every turn with a "Next:" line saying what happens next and whether you have to act.
 
+## What you are asked
+
+`/workflow new` asks two settings, saved in the state file as `prompting` (`all` or `major`) and `technical` (`yes` or `no`). A workflow saved before they existed reads as `all` and `yes`. Technical decisions off removes a kind of question; the level then removes the minor ones among what remains:
+
+| Prompting level | Technical decisions | Claude asks you about |
+| --- | --- | --- |
+| Every decision | Yes | every decision |
+| Only the major ones | Yes | the major decisions, product and technical |
+| Every decision | No | every product and design decision, no technical one |
+| Only the major ones | No | the major product and design decisions only |
+
+`guides/decision-guide.md` defines them once. Product and design is what the product does, for whom, and how it looks and behaves for you; technical is how it is built. A decision is major when it changes what you see or do, when it is costly to undo (the data model, a public interface, a new dependency, the architecture), when it touches security, privacy or user data, or when it spends money or plan limits. A decision not asked is taken with Claude's recommended option, recorded in the spec's Decisions taken or the design's Decision and ADRs, and named in one line.
+
+The phase prompt and every step agent's prompt carry the two settings in a short section ("What to ask the user", "What the user is asked"). Which question is technical is Claude's call, so that part rests on the prompt. What the mod asks itself it skips when technical decisions are off, and logs:
+
+- the gates of the technical phases (setup, design, slice, inspect) go on as if you chose Continue, with "<phase> approved without asking" in the state log; the intake, spec and retro gates still ask;
+- the model choice at the intake's gate is not asked: the steps use Claude's recommendations, or the defaults when it made none, and Claude says which in one line;
+- the next-slice question is not asked: the slices chain, whatever `auto_next` says.
+
+Two questions Claude asks in chat change with it too, through the prompt: the inspect prompt says to fix the recommended minor findings without asking, and the design prompt says to map a feature without asking.
+
+Always asked, whatever the settings: the unlock of a locked test, the push of the branch and the pull request, the removal of the worktree and branch, the branch at `/workflow new`, the retro offer at `/workflow done`, and every command you type.
+
 ## The phases
 
 | Phase | Claude writes | You approve |
@@ -60,7 +83,7 @@ Every phase prompt also carries the "Leading the user" rules: Claude opens a pha
 | inspect | Review rounds until no blocker or major is left, the minor fixes you pick, a pull request draft | What to do when 3 rounds were not enough, the minors to fix, the push and the pull request |
 | retro | Small changes to CLAUDE.md and skills, from what repeated | Each change |
 
-A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. "Continue" moves the phase, makes the workflow active again if it was paused, and the next phase starts in the same conversation: Claude ends its turn and the mod sends the next phase's prompt in a message of its own, because the step agents it registers again at the gate can only be spawned from the next turn on; "Stop here" moves it, pauses the workflow (`/workflow` lists it as paused) and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance`, `mcp__workflow__handoff` and `mcp__workflow__unlock`: the mod refuses them from a step agent.
+A phase can only write its own files: during the spec, a write to source code is refused, and during the intake, which lists none, every write in the repo is. The goal is set through `mcp__workflow__handoff` during the intake only. Claude moves a phase on with a dialog you answer; auto mode cannot answer it. With technical decisions off, the gate of a technical phase goes on as if you chose Continue (What you are asked). "Continue" moves the phase, makes the workflow active again if it was paused, and the next phase starts in the same conversation: Claude ends its turn and the mod sends the next phase's prompt in a message of its own, because the step agents it registers again at the gate can only be spawned from the next turn on; "Stop here" moves it, pauses the workflow (`/workflow` lists it as paused) and Claude writes the handoff and stops, for `/workflow continue <slug>` later; "Not yet", or closing the dialog, keeps the phase. Only the conversation can call `mcp__workflow__advance`, `mcp__workflow__handoff` and `mcp__workflow__unlock`: the mod refuses them from a step agent.
 
 ## Who does what
 
@@ -88,15 +111,15 @@ The conversation spawns the `workflow:build` agent for the slice and relays its 
 4. Green: the tests are frozen. Claude implements, then runs the slice tests, lint, typecheck and the full suite exactly as the mod listed them.
 5. The real thing: the app, the route, the screen.
 6. Verify: the mod closes the slice only if it saw every check pass on the current code. The agent ticks the slice, commits if you said so, and finishes its report.
-7. When the agent's run ends, the mod hands over: it asks you whether to go on (unless `auto_next` is on), then sends the conversation the next step in a message of its own: spawn `workflow:build` for the next slice, or write the handoff and stop, or, after the last slice, the inspect phase.
+7. When the agent's run ends, the mod hands over: it asks you whether to go on (unless `auto_next` is on or technical decisions are off), then sends the conversation the next step in a message of its own: spawn `workflow:build` for the next slice, or write the handoff and stop, or, after the last slice, the inspect phase.
 
 **When a test is wrong**, Claude stops and explains with evidence, then asks to unlock it; you answer in a dialog. You can also unlock it yourself with `/workflow unlock <file> <reason>`. Every unlock is logged and reviewed in the retro.
 
-**`auto_next`**: with `auto_next: yes` in the state file, the mod tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here; stopping pauses the workflow. `/workflow new` asks for it. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
+**`auto_next`**: with `auto_next: yes` in the state file, the mod tells the conversation to spawn `workflow:build` for the next slice without asking. With `no`, the mod asks you in a dialog after each verified slice whether to start the next one now or stop here; stopping pauses the workflow. `/workflow new` asks for it, except with technical decisions off, where it is set to `yes` and the mod chains the slices even if the file says `no`. Claude cannot change it; you can, by editing `.git/claude-workflow/<slug>.md` by hand.
 
 ## The project map
 
-A feature has no spec, so its design phase opens by offering to map the project first, Yes recommended. On yes, the conversation spawns `workflow:map`, which reads only and writes the `## Context` section at the top of `design.md`: the structure, the conventions, the code the change touches and what it may affect, with file paths. `workflow:design` starts its research from it. A project starts from its spec and is not offered the map.
+A feature has no spec, so its design phase opens by offering to map the project first, Yes recommended; with technical decisions off, Claude maps it without asking. On yes, the conversation spawns `workflow:map`, which reads only and writes the `## Context` section at the top of `design.md`: the structure, the conventions, the code the change touches and what it may affect, with file paths. `workflow:design` starts its research from it. A project starts from its spec and is not offered the map.
 
 ## The review loop
 
@@ -105,7 +128,7 @@ The inspect phase reviews the branch in rounds:
 1. The conversation spawns `workflow:review` on the whole branch; the first round also runs the `code-review` skill, and `/security-review` when the change calls for it. It merges the findings by severity.
 2. While a blocker or a major is left and fewer than 3 rounds have ended, it spawns `workflow:build` to fix them, then reviews again.
 3. After 3 rounds with a blocker or a major left, it stops and asks you how to go on: fix them by hand, accept them as known issues, or go back to the design.
-4. Once none is left, it asks you in one multi-select dialog which minor findings to fix; the others go in the pull request body as known issues.
+4. Once none is left, it asks you in one multi-select dialog which minor findings to fix; the others go in the pull request body as known issues. With technical decisions off, it fixes the ones it recommends without asking and says which.
 
 The mod counts the rounds: each time a `workflow:review` run ends with its report in inspect (an interrupted run does not count), it saves `review_round` in the state, logs "review round N" and writes a dim transcript line, and the band shows "inspect: review round N/3". The inspect prompt tells the conversation how many rounds have ended, so the count survives a pause. The count resets when the workflow leaves inspect.
 

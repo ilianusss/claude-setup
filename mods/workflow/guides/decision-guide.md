@@ -43,3 +43,12 @@ Spend the most care on decisions that are hard to undo: data models, public APIs
 ## Write down why the loser lost
 
 The losing options and the reason they lost stay in `design.md`, and in the ADR when the decision outlives the feature. That record is what stops the same debate six months later.
+
+## Prompting level
+
+`/workflow new` asks two settings, and every phase prompt states them: whether the user is asked about every decision or only the major ones, and whether they are asked about technical decisions at all. Technical decisions off removes a kind of question; the level then removes the minor ones among what remains.
+
+- **Product and design** is what the product does, for whom, and how it looks and behaves for the user. **Technical** is how it is built: the architecture, the libraries, the data layout, the tests, the slicing, the models the steps run on.
+- **A decision is major** when it changes what the user sees or does, when it is costly to undo (the data model, a public interface, a new dependency, the architecture), when it touches security, privacy or user data, or when it spends money or plan limits. Every other decision is minor.
+- **A decision not asked is still made**, with the recommended option, and recorded where the phase records its decisions: the spec's Decisions taken, the design's Decision and its ADRs. Tell the user in one line what was chosen, so they can read it later and object.
+- **Always asked**, whatever the settings, because they guard safety or are the user's own: the unlock of a locked test, the push of the branch and the pull request, the removal of the worktree, the branch at `/workflow new`, the retro offer at `/workflow done`, and anything the user starts with a command.

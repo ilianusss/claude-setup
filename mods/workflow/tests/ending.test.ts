@@ -162,6 +162,15 @@ describe('the ending dialog (AC1)', () => {
     expect(fake.questions[1]).not.toContain('ignored')
   })
 
+  test('with technical decisions off, the inspect gate is not asked but the removal still is', async ($, on) => {
+    const { fake } = await inWorktree($, on, repo({ technical: 'no' }))
+    fake.answers.push(ENDING.keep)
+
+    await approveLastGate($)
+
+    expect(fake.questions).toEqual([ENDING.question(WORKTREE, BRANCH)])
+  })
+
   test('a project is asked at the retro gate', async ($, on) => {
     const { fake } = await inWorktree($, on, repo({ size: 'project', phase: 'retro' }))
     fake.answers.push(GATE.continue, ENDING.keep)
