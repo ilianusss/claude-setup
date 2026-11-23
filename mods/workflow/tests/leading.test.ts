@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { BRANCH, CHAINING, COMMITS, GATE, SIZE } from '../src/labels'
+import { BRANCH, CHAINING, COMMITS, GATE, PROMPTING, SIZE, TECHNICAL } from '../src/labels'
 import { CONFIG, ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
@@ -53,7 +53,7 @@ describe('the phase start line', () => {
     const logged = recordLog(on)
     const fake = fakeEngine(on, { [`${ROOT}/.claude/workflow.json`]: JSON.stringify(CONFIG) })
     fake.isLinked = true
-    fake.answers.push(SIZE.feature, COMMITS.no, CHAINING.no, BRANCH.create('feat/add-login'))
+    fake.answers.push(SIZE.feature, PROMPTING.all, TECHNICAL.yes, COMMITS.no, CHAINING.no, BRANCH.create('feat/add-login'))
     await start($)
 
     await run($, 'new Add login')

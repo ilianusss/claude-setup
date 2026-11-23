@@ -14,6 +14,8 @@ const WORKFLOW: Workflow = {
   branch: 'feat/login',
   worktree: '/repo',
   slice: 3,
+  prompting: 'major',
+  technical: false,
   commits: true,
   autoNext: false,
   models: { ...DEFAULT_PLAN, build: { model: 'haiku', effort: 'low' }, review: { model: 'sonnet', effort: 'xhigh' } },

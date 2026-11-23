@@ -18,6 +18,24 @@ export const STEP_SOURCES: Readonly<Record<Step, { phase: Phase; section: AgentS
   review: { phase: 'inspect', section: 'Agent' },
 }
 
+type PhaseKind = 'product' | 'technical'
+
+// The retro changes the user's own setup, each change picked by them: its gate asks like a product one.
+const PHASE_KINDS: Readonly<Record<Exclude<Phase, 'done'>, PhaseKind>> = {
+  intake: 'product',
+  setup: 'technical',
+  spec: 'product',
+  design: 'technical',
+  slice: 'technical',
+  build: 'technical',
+  inspect: 'technical',
+  retro: 'product',
+}
+
+export function asksAtGate(workflow: Workflow): boolean {
+  return workflow.technical || workflow.phase === 'done' || PHASE_KINDS[workflow.phase] === 'product'
+}
+
 export function stepsOf(workflow: Workflow, needsSetup: boolean): Step[] {
   return STEPS.filter(
     step =>

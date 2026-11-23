@@ -252,7 +252,7 @@ export async function nextStep($: EngineInterface, context: Context, advanced: W
       text: `The build is done: "${advanced.slug}" is now in its inspect phase. Go straight on with it in this conversation:\n\n${await phasePrompt($, context, advanced)}`,
     }
   }
-  if (advanced.autoNext) {
+  if (advanced.autoNext || !advanced.technical) {
     await saveStatus($, context, advanced, 'active')
     return { kind: 'go', text: `Call mcp__workflow__handoff with where things stand, then go straight on with slice ${advanced.slice}. ${spawnBuild(advanced)}` }
   }

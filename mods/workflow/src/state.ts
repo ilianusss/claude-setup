@@ -7,9 +7,11 @@ export const PHASES = ['intake', 'setup', 'spec', 'design', 'slice', 'build', 'i
 export type Phase = (typeof PHASES)[number]
 export type Size = 'feature' | 'project'
 export type Status = 'active' | 'paused' | 'done' | 'abandoned'
+export type Prompting = 'all' | 'major'
 
 const SIZES: readonly Size[] = ['feature', 'project']
 const STATUSES: readonly Status[] = ['active', 'paused', 'done', 'abandoned']
+const PROMPTINGS: readonly Prompting[] = ['all', 'major']
 const SEQUENCES: Readonly<Record<Size, readonly Phase[]>> = {
   feature: ['intake', 'design', 'slice', 'build', 'inspect', 'done'],
   project: ['intake', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
@@ -29,6 +31,8 @@ export type Workflow = {
   slice: number
   step?: number
   reviewRound?: number
+  prompting: Prompting
+  technical: boolean
   commits: boolean
   autoNext: boolean
   models: ModelPlan
@@ -58,6 +62,15 @@ function oneOf<T extends string>(data: Frontmatter, key: string, allowed: readon
 
 function flag(data: Frontmatter, key: string): boolean {
   return oneOf(data, key, ['yes', 'no']) === 'yes'
+}
+
+// A workflow saved before these settings existed was asked about everything: it reads as that.
+function promptingOf(data: Frontmatter): Prompting {
+  return data.prompting === undefined ? 'all' : oneOf(data, 'prompting', PROMPTINGS)
+}
+
+function technicalOf(data: Frontmatter): boolean {
+  return data.technical === undefined || flag(data, 'technical')
 }
 
 function positive(data: Frontmatter, key: string): number | undefined {
@@ -117,6 +130,8 @@ export function parseWorkflow(markdown: string): Workflow {
     slice,
     ...(step === undefined ? {} : { step }),
     ...(reviewRound === undefined ? {} : { reviewRound }),
+    prompting: promptingOf(data),
+    technical: technicalOf(data),
     commits: flag(data, 'commits'),
     autoNext: flag(data, 'auto_next'),
     models: parsePlan(list(data, 'models')),
@@ -152,6 +167,8 @@ export function renderWorkflow(workflow: Workflow): string {
     slice: String(workflow.slice),
     ...(workflow.step === undefined ? {} : { step: String(workflow.step) }),
     ...(reviewRoundOf(workflow) === 0 ? {} : { review_round: String(workflow.reviewRound) }),
+    prompting: workflow.prompting,
+    technical: workflow.technical ? 'yes' : 'no',
     commits: workflow.commits ? 'yes' : 'no',
     auto_next: workflow.autoNext ? 'yes' : 'no',
     models: renderPlan(workflow.models),

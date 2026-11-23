@@ -28,6 +28,8 @@ const WORKFLOW: Workflow = {
   worktree: '/repo',
   slice: 2,
   reviewRound: 2,
+  prompting: 'all',
+  technical: true,
   commits: false,
   autoNext: false,
   models: DEFAULT_PLAN,

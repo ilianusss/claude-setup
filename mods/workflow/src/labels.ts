@@ -6,6 +6,18 @@ export const SIZE = {
   project: 'Project: a new product or a large feature',
 }
 
+export const PROMPTING = {
+  question: 'Be asked about every decision, or only the major ones?',
+  all: 'Every decision',
+  major: 'Only the major ones',
+}
+
+export const TECHNICAL = {
+  question: 'Be asked about technical decisions?',
+  yes: 'Yes, ask me',
+  no: 'No, Claude decides',
+}
+
 export const COMMITS = {
   question: 'Commit after each verified slice?',
   yes: 'Yes, commit each slice',
@@ -42,6 +54,9 @@ export const MODELS = {
   defaults: 'Use the defaults',
   recommended: "Use Claude's recommendations",
   perStep: 'Choose per step',
+  notAsked: (used: string) => `Technical decisions are off, so the models were not asked: the steps use ${used}.`,
+  usedDefaults: 'the defaults',
+  usedRecommended: (changes: string) => `Claude's recommendations (${changes})`,
 }
 
 export const PICKER = {
@@ -54,7 +69,12 @@ export const PICKER = {
   dialogDefault: '(default)',
 }
 
-export const GATE = { continue: 'Continue', stop: 'Stop here', wait: 'Not yet' }
+export const GATE = {
+  continue: 'Continue',
+  stop: 'Stop here',
+  wait: 'Not yet',
+  notAsked: (phase: Phase) => `Technical decisions are off, so the user was not asked at the ${phase} gate: the workflow moved on as if they chose Continue.`,
+}
 export const UNLOCK = { yes: 'Unlock', no: 'Keep locked' }
 export const RETRO = { run: 'Run the retro first', close: 'Close now' }
 export const ADOPT = { rebuild: 'Rebuild it', skip: 'Skip' }

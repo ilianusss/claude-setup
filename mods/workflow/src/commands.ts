@@ -8,7 +8,7 @@ import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
 import { offerEnding } from './ending'
-import { ADOPT, BRANCH, CHAINING, COMMITS, RETRO, SIZE, SWITCH } from './labels'
+import { ADOPT, BRANCH, CHAINING, COMMITS, PROMPTING, RETRO, SIZE, SWITCH, TECHNICAL } from './labels'
 import { chooseModels, recommendationsFor } from './picker'
 import { DEFAULT_PLAN, renderPlan } from './plan'
 import { enterWorktreePrompt, pausePrompt, phasePrompt, setupPrompt } from './prompts'
@@ -17,7 +17,7 @@ import { addWorktree, isDefaultBranch, switchBranch } from './repo'
 import type { Runtime } from './runtime'
 import { parseSlices } from './slices'
 import { inPhase, slugify, withLog } from './state'
-import type { Phase, Size, Workflow } from './state'
+import type { Phase, Prompting, Size, Workflow } from './state'
 import { announcePhase, phaseLabel, refreshStatus } from './status'
 import { openWorkflowsEverywhere, saveWorkflow } from './store'
 import { registerToolsOnce } from './tools'
@@ -94,13 +94,18 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     return `"${slug}" exists already. /workflow continue ${slug} resumes it.`
   }
   let size: Size
+  let prompting: Prompting
+  let technical: boolean
   let commits: boolean
   let autoNext: boolean
   let where: Awaited<ReturnType<typeof placement>>
   try {
     size = (await ask($, SIZE.question(title), [SIZE.feature, SIZE.project], 'Size')) === SIZE.project ? 'project' : 'feature'
+    prompting = (await ask($, PROMPTING.question, [PROMPTING.all, PROMPTING.major], 'Prompting')) === PROMPTING.major ? 'major' : 'all'
+    technical = (await ask($, TECHNICAL.question, [TECHNICAL.yes, TECHNICAL.no], 'Technical')) !== TECHNICAL.no
     commits = (await ask($, COMMITS.question, [COMMITS.yes, COMMITS.no], 'Commits')) === COMMITS.yes
-    autoNext = (await ask($, CHAINING.question, [CHAINING.yes, CHAINING.no], 'Next slice')) === CHAINING.yes
+    // Without technical decisions the user is not asked between slices either: the slices chain.
+    autoNext = !technical || (await ask($, CHAINING.question, [CHAINING.yes, CHAINING.no], 'Next slice')) === CHAINING.yes
     where = await placement($, session, slug)
   } catch (error) {
     return error instanceof Error && error.message.startsWith('git ')
@@ -118,6 +123,8 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     branch: where.branch,
     worktree: where.worktree,
     slice: 0,
+    prompting,
+    technical,
     commits,
     autoNext,
     models: DEFAULT_PLAN,
@@ -298,6 +305,8 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       branch: context.repo.branch,
       worktree: context.repo.root,
       slice,
+      prompting: 'all',
+      technical: true,
       commits: false,
       autoNext: false,
       models: DEFAULT_PLAN,

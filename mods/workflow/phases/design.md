@@ -19,7 +19,7 @@ Call `mcp__workflow__progress` with a step's number when you start each numbered
 
 ## Agent
 
-Your prompt says which part to do: research, options, or writing. Never choose between options: the user does, through the conversation.
+Your prompt says which part to do: research, options, or writing. Never choose between options: the choice comes to you through the conversation.
 
 1. **Read** the spec, the Context section of `design.md` when the map agent wrote one, the project CLAUDE.md and the code the change touches. For a feature without a spec, start `design.md` with a short "Problem and acceptance criteria" section in EARS (`guides/ears.md`), for the user to confirm.
 2. **Check versions and dependencies.** The installed version of each library you rely on, from the lockfile; context7 for an API newer than what you know; the dependency check of `writing-secure-code` for anything new.

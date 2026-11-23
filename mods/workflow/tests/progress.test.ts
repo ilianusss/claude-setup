@@ -138,6 +138,8 @@ describe('the saved sub-step', () => {
     worktree: '/repo',
     slice: 0,
     step: 3,
+    prompting: 'all',
+    technical: true,
     commits: false,
     autoNext: false,
     models: DEFAULT_PLAN,

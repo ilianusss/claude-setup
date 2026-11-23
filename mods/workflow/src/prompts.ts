@@ -101,6 +101,60 @@ function header(workflow: Workflow): string[] {
   ]
 }
 
+function askedAbout(workflow: Workflow): string {
+  if (workflow.technical) {
+    return workflow.prompting === 'all' ? 'every decision, product and technical' : 'the major decisions only, product and technical'
+  }
+  return workflow.prompting === 'all'
+    ? 'every product and design decision, and about no technical one'
+    : 'the major product and design decisions only, and about no technical one'
+}
+
+function asksEverything(workflow: Workflow): boolean {
+  return workflow.prompting === 'all' && workflow.technical
+}
+
+function guidePath($: EngineInterface): string {
+  return `\`${$.plugin.root}/guides/decision-guide.md\``
+}
+
+function whatToAsk($: EngineInterface, workflow: Workflow): string {
+  const settings = `This workflow asks the user about ${askedAbout(workflow)}.`
+  if (asksEverything(workflow)) return ['## What to ask the user', '', `${settings} Ask each one as the steps below say.`].join('\n')
+  return [
+    '## What to ask the user',
+    '',
+    [
+      settings,
+      `${guidePath($)} defines, in its Prompting level section, a major decision and what is product and design rather than technical.`,
+      "A decision these settings leave out is not asked, whatever a step below says: take your recommended option, record it where the phase records its decisions (the spec's Decisions taken, the design's Decision and its ADRs), and tell the user in one line what you chose.",
+      ...(workflow.technical
+        ? []
+        : [
+            'The mod moves past the gates of the technical phases (setup, design, slice, inspect) without a dialog: still call mcp__workflow__advance at their end.',
+          ]),
+      'Always asked, whatever the settings: the unlock of a locked test, the push of the branch and the pull request, and the removal of the worktree.',
+    ].join(' '),
+  ].join('\n')
+}
+
+function whatTheUserIsAsked($: EngineInterface, workflow: Workflow): string {
+  const settings = `This workflow asks the user about ${askedAbout(workflow)}.`
+  if (asksEverything(workflow)) {
+    return ['## What the user is asked', '', `${settings} Put each decision that belongs to the user in your open questions.`].join('\n')
+  }
+  return [
+    '## What the user is asked',
+    '',
+    [
+      settings,
+      `${guidePath($)} defines, in its Prompting level section, a major decision and what is product and design rather than technical.`,
+      "Put in your open questions only the decisions the user is asked about. For any other, take your recommended option, record it where your phase records its decisions (the spec's Decisions taken, the design's Decision and its ADRs), and list it in your report under Done.",
+      ...(workflow.technical ? [] : ['A test that looks wrong still goes in your open questions: only the user unlocks it.']),
+    ].join(' '),
+  ].join('\n')
+}
+
 export function spawnBuild(workflow: Workflow): string {
   const { model, effort } = workflow.models.build
   return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks. Wait for it, then relay its report to the user: what it built, each check and its result, whether mcp__workflow__verify closed the slice, and its open questions.`
@@ -125,12 +179,18 @@ function stepAgent(workflow: Workflow, step: Step): string {
   ].join('\n')
 }
 
+function mapOffer(workflow: Workflow): string {
+  return workflow.technical
+    ? 'open the phase by asking the user with AskUserQuestion whether to map the project first, with the options "Yes, map the project first (Recommended)" and "No, start the design". On yes, spawn'
+    : 'technical decisions are off, so open the phase by mapping the project without asking, the recommended answer, and tell the user so in one line. Spawn'
+}
+
 function mapAgent(workflow: Workflow): string | undefined {
   if (workflow.phase !== 'design' || workflow.size !== 'feature') return undefined
   return [
     '## The map agent',
     '',
-    `This workflow is a feature, with no spec to start from: open the phase by asking the user with AskUserQuestion whether to map the project first, with the options "Yes, map the project first (Recommended)" and "No, start the design". On yes, spawn \`workflow:map\` with the Agent tool, in the foreground, on ${describeChoice(workflow.models.map)}: it writes a \`## Context\` section at the top of this workflow's \`design.md\` (the structure, the conventions, the code the change touches and what it may affect). Relay what it found, then go on with the research; \`workflow:design\` starts from that section.`,
+    `This workflow is a feature, with no spec to start from: ${mapOffer(workflow)} \`workflow:map\` with the Agent tool, in the foreground, on ${describeChoice(workflow.models.map)}: it writes a \`## Context\` section at the top of this workflow's \`design.md\` (the structure, the conventions, the code the change touches and what it may affect). Relay what it found, then go on with the research; \`workflow:design\` starts from that section.`,
   ].join('\n')
 }
 
@@ -141,6 +201,11 @@ function reviewRounds(workflow: Workflow): string | undefined {
     '',
     `- ${reviewRoundOf(workflow)} of ${MAX_REVIEW_ROUNDS} review rounds have ended in this workflow. The mod counts one each time a \`workflow:review\` run ends; the loop stops at ${MAX_REVIEW_ROUNDS}.`,
     `- Fixes run in \`workflow:build\`, on ${describeChoice(workflow.models.build)}: spawn it in the foreground with the findings to fix and wait for its report. In this phase it fixes them test-first without the slice lock, then runs every check.`,
+    ...(workflow.technical
+      ? []
+      : [
+          '- Technical decisions are off: in step 4, do not ask which minor findings to fix. Have the ones you recommend fixed, put the others in the pull request body as known issues, and tell the user in one line which were fixed.',
+        ]),
   ].join('\n')
 }
 
@@ -183,6 +248,12 @@ function defaultModels(context: Context, workflow: Workflow): string {
     "Each later step of this workflow runs in its own agent. The mod's default model and effort for each:",
     '',
     ...stepsOf(workflow, context.config === undefined).map(step => `- ${step}: ${describeChoice(DEFAULT_PLAN[step])}`),
+    ...(workflow.technical
+      ? []
+      : [
+          '',
+          'Technical decisions are off, so the user is not asked to choose the models: at the gate the mod uses your recommendations, or these defaults when you give none, and its answer says which, for you to tell the user in one line.',
+        ]),
   ].join('\n')
 }
 
@@ -212,6 +283,7 @@ export async function phasePrompt(
   return joined([
     ...header(workflow),
     leading(context, workflow),
+    workflow.phase === 'done' ? undefined : whatToAsk($, workflow),
     drift,
     resumeAt(doc, workflow),
     doc.body,
@@ -239,6 +311,7 @@ export async function agentInstructions(
   return joined([
     ...header(workflow),
     section,
+    whatTheUserIsAsked($, workflow),
     isFixing ? fixing(context.config) : undefined,
     files($, specsFolder(context, workflow)),
     isBuilding ? await currentSlice($, context, workflow) : undefined,

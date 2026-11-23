@@ -8,7 +8,7 @@ import { day, iso, submitLater } from './clock'
 import { loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { GATE, MODELS } from './labels'
-import { readPhase, stepsOf } from './phases'
+import { asksAtGate, readPhase, stepsOf } from './phases'
 import { chooseModels, rememberRecommendations, savePlan } from './picker'
 import {
   DEFAULT_PLAN,
@@ -214,6 +214,11 @@ async function askPlan(
   return workflow.models
 }
 
+function modelsNotAsked(plan: ModelPlan, steps: readonly Step[]): string {
+  const changes = describeChangesFromDefaults(plan, steps)
+  return MODELS.notAsked(changes === '' ? MODELS.usedDefaults : MODELS.usedRecommended(changes))
+}
+
 function choosingPrompt(workflow: Workflow): string {
   return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase. The user is choosing each step's model and effort in the Models panel. End your turn now, with a Next: line saying they choose the models in the panel: the mod sends you the ${workflow.phase} phase prompt once they confirm or cancel.`
 }
@@ -239,22 +244,31 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
     slice = open.number
   }
 
-  const answer = await askOrUndefined(
-    $,
-    `Approve the ${workflow.phase} phase of "${workflow.slug}" and move to ${target}?\n\n${summary}`,
-    [GATE.continue, GATE.stop, GATE.wait],
-    'Gate',
-  )
+  const isAsked = asksAtGate(workflow)
+  const answer = isAsked
+    ? await askOrUndefined(
+        $,
+        `Approve the ${workflow.phase} phase of "${workflow.slug}" and move to ${target}?\n\n${summary}`,
+        [GATE.continue, GATE.stop, GATE.wait],
+        'Gate',
+      )
+    : GATE.continue
   if (answer === undefined) return `The user closed the dialog: "${workflow.slug}" stays in its ${workflow.phase} phase.`
   if (answer !== GATE.continue && answer !== GATE.stop) {
     return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
   }
 
   const isStopping = answer === GATE.stop
-  const choice =
-    workflow.phase === 'intake' ? await askPlan($, workflow, stepsOf(workflow, context.config === undefined), recommendations) : workflow.models
+  const steps = stepsOf(workflow, context.config === undefined)
+  const unasked = workflow.phase === 'intake' && !workflow.technical ? withRecommendations(DEFAULT_PLAN, recommendations) : undefined
+  const choice = workflow.phase !== 'intake' ? workflow.models : (unasked ?? (await askPlan($, workflow, steps, recommendations)))
+  const notes = [
+    ...(isAsked ? [] : [GATE.notAsked(workflow.phase)]),
+    ...(unasked === undefined ? [] : [`Tell the user in one line: ${modelsNotAsked(unasked, steps)}`]),
+  ].join(' ')
+  const approval = isAsked ? `${workflow.phase} approved` : `${workflow.phase} approved without asking (technical decisions are off)`
   const status = target === 'done' ? 'done' : isStopping ? 'paused' : 'active'
-  let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), `${workflow.phase} approved`)
+  let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), approval)
   await saveWorkflow($, context.repo, context.paths, moved)
   if (!isStopping) announcePhase($, moved)
   if (choice !== 'per step') moved = await savePlan($, context, moved, choice, now)
@@ -269,15 +283,16 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   }
   await refreshStatus($)
   await registerAgents($)
+  const approved = notes === '' ? 'Approved:' : `${notes} Approved:`
   if (target === 'done') {
-    const closed = `Approved: "${workflow.slug}" is done.`
+    const closed = `${approved} "${workflow.slug}" is done.`
     const ending = await offerEnding($, runtime, context, moved, now)
     if (ending.kind === 'leave') return `${closed}\n\n${ending.prompt}`
     return ending.text === '' ? closed : `${closed} ${ending.text}`
   }
-  if (isStopping) return `Approved: "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
+  if (isStopping) return `${approved} "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
   submitLater($, `The ${target} phase of "${workflow.slug}" starts now. Go on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`)
-  return `Approved: "${workflow.slug}" is now in its ${target} phase. ${NEXT_IN_ITS_OWN_TURN} End your turn now, with a Next: line saying the ${target} phase starts right away.`
+  return `${approved} "${workflow.slug}" is now in its ${target} phase. ${NEXT_IN_ITS_OWN_TURN} End your turn now, with a Next: line saying the ${target} phase starts right away.`
 }
 
 async function progress($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
