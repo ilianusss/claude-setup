@@ -90,6 +90,7 @@ export type Fake = {
   refs: Map<string, string>
   worktreeRemoveExit: number
   gitRuns: Array<{ cwd: string; line: string }>
+  rmRuns: string[][]
 }
 
 function fnv(text: string): string {
@@ -151,6 +152,11 @@ function git(fake: Fake, args: readonly string[]): { exitCode: number; stdout: s
   return { exitCode: 1, stdout: '' }
 }
 
+function rm(fake: Fake, args: readonly string[]): { exitCode: number; stdout: string } {
+  for (const path of args.filter(arg => !arg.startsWith('-'))) fake.files.delete(path)
+  return { exitCode: 0, stdout: '' }
+}
+
 function children(fake: Fake, dir: string): Array<{ name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }> {
   const names = new Map<string, 'file' | 'dir'>()
   for (const path of fake.files.keys()) {
@@ -207,6 +213,7 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
     refs: new Map(),
     worktreeRemoveExit: 0,
     gitRuns: [],
+    rmRuns: [],
   }
   mock.store(on)
 
@@ -227,7 +234,8 @@ export function fakeEngine(on: On, files: Record<string, string> = {}, branch = 
   on('fs.list', (_, e) => ({ value: children(fake, e.path) }))
   on('process.run', (_, e) => {
     if (e.argv[0] === 'git') fake.gitRuns.push({ cwd: e.init?.cwd ?? '', line: e.argv.slice(1).join(' ') })
-    const ran = e.argv[0] === 'git' ? git(fake, e.argv.slice(1)) : { exitCode: 127, stdout: '' }
+    if (e.argv[0] === 'rm') fake.rmRuns.push(e.argv.slice(1))
+    const ran = e.argv[0] === 'git' ? git(fake, e.argv.slice(1)) : e.argv[0] === 'rm' ? rm(fake, e.argv.slice(1)) : { exitCode: 127, stdout: '' }
     return { value: { ...ran, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('tool.call', (_, e) => {

@@ -91,7 +91,7 @@ function heldWorktree(workflows: readonly Workflow[], repo: Repo): Workflow | un
 }
 
 function heldRefusal(held: Workflow): string {
-  return `workflow: ExitWorktree with action "remove" would delete the worktree of the workflow "${held.slug}" without checking that it is clean and pushed, or asking the user. Leave it with action "keep": \`/workflow done ${held.slug}\` offers to remove it once it is clean and pushed, and after the user's yes mcp__workflow__finish removes it.`
+  return `workflow: ExitWorktree with action "remove" would delete the worktree of the workflow "${held.slug}" without checking that it is clean and pushed, or asking the user. Leave it with action "keep": \`/workflow delete ${held.slug}\` offers to remove it once it is clean and pushed, and after the user's yes mcp__workflow__finish removes it.`
 }
 
 function unresolvedRefusal(what: string): string {

@@ -59,3 +59,7 @@ Keep these section names: slices name the sections they need, and the workflow m
 ## What changed from the design
 
 <Filled in by the retro: where the build departed from this document, and why.>
+
+## Known issues
+
+<Filled in by the inspect phase: each review finding left unfixed, with its `file:line`. The pull request body takes them from here.>

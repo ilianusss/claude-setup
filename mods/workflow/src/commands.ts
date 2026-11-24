@@ -7,8 +7,8 @@ import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
-import { offerEnding } from './ending'
-import { ADOPT, BRANCH, CHAINING, COMMITS, PROMPTING, RETRO, SIZE, SWITCH, TECHNICAL } from './labels'
+import { forget, offerEnding } from './ending'
+import { ADOPT, BRANCH, CHAINING, COMMITS, DELETE, DOCS, PROMPTING, SIZE, SWITCH, TECHNICAL } from './labels'
 import { chooseModels, recommendationsFor } from './picker'
 import { DEFAULT_PLAN, renderPlan } from './plan'
 import { enterWorktreePrompt, pausePrompt, phasePrompt, setupPrompt } from './prompts'
@@ -16,10 +16,10 @@ import { Refusal, describe, refuse } from './refusal'
 import { addWorktree, isDefaultBranch, switchBranch } from './repo'
 import type { Runtime } from './runtime'
 import { parseSlices } from './slices'
-import { inPhase, slugify, withLog } from './state'
-import type { Phase, Prompting, Size, Workflow } from './state'
+import { slugify, withLog } from './state'
+import type { KeepDocs, Phase, Prompting, Size, Workflow } from './state'
 import { announcePhase, phaseLabel, refreshStatus } from './status'
-import { openWorkflowsEverywhere, saveWorkflow } from './store'
+import { isPlainSlug, openWorkflowsEverywhere, saveWorkflow } from './store'
 import { registerToolsOnce } from './tools'
 
 const RECENT_MS = 30 * 60_000
@@ -34,7 +34,7 @@ const USAGE = [
   '- /workflow pause: write the handoff and stop',
   '- /workflow models: choose the model and effort of each step',
   '- /workflow unlock <file> <reason>: unlock a locked test yourself',
-  '- /workflow done <slug>, /workflow abandon <slug> <reason>: close one',
+  '- /workflow delete [slug]: delete one, done or not, and offer to remove its worktree',
   '- /workflow adopt: set up this project, or rebuild workflows from their specs',
 ].join('\n')
 
@@ -81,6 +81,18 @@ async function placement($: EngineInterface, session: Session, slug: string): Pr
   return { branch: context.repo.branch, worktree: context.repo.root, here: true }
 }
 
+const KEEP_DOCS_ANSWERS: ReadonlyArray<[string, KeepDocs]> = [
+  [DOCS.all, 'all'],
+  [DOCS.specs, 'specs'],
+  [DOCS.code, 'code'],
+  [DOCS.ask, 'ask'],
+]
+
+async function askKeepDocs($: EngineInterface): Promise<KeepDocs> {
+  const answer = await ask($, DOCS.question, KEEP_DOCS_ANSWERS.map(([label]) => label), 'Documents')
+  return KEEP_DOCS_ANSWERS.find(([label]) => label === answer)?.[1] ?? 'all'
+}
+
 async function askForTitle($: EngineInterface): Promise<string> {
   await $.prompt.fill({ text: '/workflow new ' })
   return 'name the workflow: type its title after /workflow new, then press Enter.'
@@ -97,6 +109,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
   let prompting: Prompting
   let technical: boolean
   let commits: boolean
+  let keepDocs: KeepDocs
   let autoNext: boolean
   let where: Awaited<ReturnType<typeof placement>>
   try {
@@ -104,6 +117,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     prompting = (await ask($, PROMPTING.question, [PROMPTING.all, PROMPTING.major], 'Prompting')) === PROMPTING.major ? 'major' : 'all'
     technical = (await ask($, TECHNICAL.question, [TECHNICAL.yes, TECHNICAL.no], 'Technical')) !== TECHNICAL.no
     commits = (await ask($, COMMITS.question, [COMMITS.yes, COMMITS.no], 'Commits')) === COMMITS.yes
+    keepDocs = await askKeepDocs($)
     // Without technical decisions the user is not asked between slices either: the slices chain.
     autoNext = !technical || (await ask($, CHAINING.question, [CHAINING.yes, CHAINING.no], 'Next slice')) === CHAINING.yes
     where = await placement($, session, slug)
@@ -127,6 +141,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     technical,
     commits,
     autoNext,
+    keepDocs,
     models: DEFAULT_PLAN,
     paths: [],
     session: await $.session.id(),
@@ -221,40 +236,37 @@ async function pause($: EngineInterface, { context, now }: Session, slug: string
   return `pausing "${target.slug}". Claude writes the handoff, then stops.`
 }
 
-async function close($: EngineInterface, session: Session, slug: string | undefined, reason: string, abandon: boolean): Promise<string> {
-  const { context, now } = session
+function notDeleted(workflow: Workflow, reason?: string): string {
+  return reason === undefined
+    ? `Nothing was deleted. \`/workflow delete ${workflow.slug}\` asks again.`
+    : `Nothing was deleted: ${reason}. Once that is fixed, \`/workflow delete ${workflow.slug}\` offers to remove the worktree again.`
+}
+
+// One command ends a workflow whatever its state: it deletes the record, after offering to remove the worktree, since
+// once the record is gone the mod can no longer offer it.
+async function remove($: EngineInterface, session: Session, slug: string | undefined): Promise<string> {
+  const { context, now, runtime } = session
   const target = pick(context, slug)
-  if (abandon) {
-    const closed = withLog({ ...target, status: 'abandoned', updated: iso(now) }, day(now), `abandoned: ${reason || 'no reason given'}`)
-    await saveWorkflow($, context.repo, context.paths, closed)
-    await refreshStatus($)
-    return `abandoned "${target.slug}".`
-  }
-  if (target.size === 'project' && target.phase !== 'retro' && target.phase !== 'done') {
-    const answer = await askOrUndefined($, `Run the retro of "${target.slug}" before closing it?`, [RETRO.run, RETRO.close], 'Retro')
-    if (answer === undefined) return 'cancelled, nothing changed.'
-    if (answer === RETRO.run) {
-      const retro: Workflow = { ...inPhase(target, 'retro'), status: 'active', updated: iso(now) }
-      await saveWorkflow($, context.repo, context.paths, withLog(retro, day(now), 'retro started'))
-      await refreshStatus($)
-      announcePhase($, retro)
-      submitLater($, await phasePrompt($, context, retro))
-      return `starting the retro of "${target.slug}".`
-    }
-  }
-  let done = target
-  if (target.status !== 'done') {
-    done = withLog({ ...inPhase(target, 'done'), status: 'done', updated: iso(now) }, day(now), 'done')
-    await saveWorkflow($, context.repo, context.paths, done)
-    await refreshStatus($)
-  }
-  const closed = `"${target.slug}" is done.`
-  const ending = await offerEnding($, session.runtime, context, done, now)
+  if (!isPlainSlug(target.slug)) return `cannot delete "${target.slug}": its name is not a plain file name. Delete ${context.paths.dir}/${target.slug}.md by hand.`
+  const confirmed = await askOrUndefined($, DELETE.question(target.slug, target.status), [DELETE.yes, DELETE.no], 'Delete')
+  if (confirmed !== DELETE.yes) return 'cancelled, nothing changed.'
+  const ending = await offerEnding($, runtime, context, target, now, 'delete')
+  if (ending.kind === 'cancelled') return notDeleted(target)
   if (ending.kind === 'leave') {
     submitLater($, ending.prompt)
-    return `${closed} Claude leaves the worktree, then removes it.`
+    return `Claude leaves the worktree and removes it, then the mod deletes "${target.slug}".`
   }
-  return ending.text === '' ? closed : `${closed} ${ending.text}`
+  if (ending.kind === 'blocked') {
+    const anyway = await askOrUndefined($, DELETE.blocked(target.worktree, ending.reason), [DELETE.anyway, DELETE.cancel], 'Delete')
+    if (anyway !== DELETE.anyway) return notDeleted(target, ending.reason)
+    await forget($, context, target)
+    await refreshStatus($)
+    return `Deleted the workflow "${target.slug}", and kept the worktree ${target.worktree} and the branch ${target.branch}: remove them by hand when you no longer need them.`
+  }
+  await forget($, context, target)
+  await refreshStatus($)
+  const deleted = `Deleted the workflow "${target.slug}".`
+  return ending.text === '' ? deleted : `${ending.text} ${deleted}`
 }
 
 function byThePerson(origin: PromptOrigin): boolean {
@@ -309,6 +321,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       technical: true,
       commits: false,
       autoNext: false,
+      keepDocs: 'all',
       models: DEFAULT_PLAN,
       paths: [],
       session: await $.session.id(),
@@ -351,10 +364,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
       return models($, session)
     case 'unlock':
       return unlock($, session, rest, origin)
-    case 'done':
-      return close($, session, rest[0], '', false)
-    case 'abandon':
-      return close($, session, rest[0], rest.slice(1).join(' '), true)
+    case 'delete':
+      return remove($, session, rest[0])
     case 'adopt':
       return adopt($, session)
     default:
@@ -365,8 +376,8 @@ async function dispatch($: EngineInterface, session: Session, args: string, orig
 export async function registerCommand($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'workflow',
-    description: "This repo's workflows; new, continue, next, pause, models, unlock, done, abandon, adopt, all.",
-    argumentHint: '[new <title> | continue [slug] | next | pause | models | unlock <file> <reason> | done | abandon | adopt | all]',
+    description: "This repo's workflows; new, continue, next, pause, models, unlock, delete, adopt, all.",
+    argumentHint: '[new <title> | continue [slug] | next | pause | models | unlock <file> <reason> | delete [slug] | adopt | all]',
   })
 }
 
