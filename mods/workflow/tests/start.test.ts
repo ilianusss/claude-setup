@@ -317,7 +317,7 @@ describe('status', () => {
 
     const ran = await run($, 'all')
 
-    expect(ran.text).toContain(`${ROOT}: add-login (intake)`)
+    expect(ran.text).toContain(`${ROOT}-add-login: add-login (intake)`)
   })
 
   test('/workflow all drops the workflows of a repo that no longer exists', async ($, on) => {
@@ -325,7 +325,7 @@ describe('status', () => {
     fake.answers.push(SIZE.feature, PROMPTING.all, TECHNICAL.yes, COMMITS.no, DOCS.all, CHAINING.no, BRANCH.stay('main'))
     await start($)
     await run($, 'new Add login')
-    for (const path of [...fake.files.keys()]) if (path.startsWith(`${ROOT}/`)) fake.files.delete(path)
+    for (const path of [...fake.files.keys()]) if (path.startsWith(`${ROOT}/`) || path.startsWith(`${ROOT}-add-login/`)) fake.files.delete(path)
 
     const ran = await run($, 'all')
 

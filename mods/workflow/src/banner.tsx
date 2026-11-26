@@ -6,10 +6,12 @@ import { ACTIVITY_TEXT, currentActivity, currentBanner, phaseText, setActivity }
 
 export type StepState = 'done' | 'current' | 'next'
 export type StepSegment = { label: string; state: StepState }
-export type BandLine = { steps: StepSegment[]; lead: string; activity: string }
+export type BandLeft = { head: string; detail: string; runner: string; activity: string }
+export type BandLine = { left: BandLeft; steps: StepSegment[] }
 
 const STEP_GAP = '  '
-const SECTION_GAP = ' │ '
+const DIVIDER = '│'
+const SECTION_GAP = ' '
 const PART_GAP = ' · '
 const ELLIPSIS = '...'
 const SHORTEST_STEP = 12
@@ -21,11 +23,21 @@ const UNMEASURED_COLUMNS = 80
 const STEP_LOOK: Readonly<Record<StepState, TextProps>> = {
   done: { color: 'success' },
   current: { weight: 'bold', color: 'suggestion' },
-  next: { dimColor: true },
+  next: { color: 'inactive' },
+}
+const STEP_MARK: Readonly<Record<StepState, string>> = { done: '✓ ', current: '● ', next: '' }
+
+function stepText(segment: StepSegment): string {
+  return segment.label === ELLIPSIS ? ELLIPSIS : `${STEP_MARK[segment.state]}${segment.label}`
 }
 
-function widthOf(steps: readonly StepSegment[]): number {
-  return steps.length === 0 ? 0 : steps.map(segment => segment.label).join(STEP_GAP).length + SECTION_GAP.length
+function rightWidth(steps: readonly StepSegment[]): number {
+  return steps.length === 0 ? DIVIDER.length : DIVIDER.length + SECTION_GAP.length + steps.map(stepText).join(STEP_GAP).length
+}
+
+function leftWidth(left: BandLeft): number {
+  const runner = left.runner === '' ? 0 : PART_GAP.length + left.runner.length
+  return left.head.length + left.detail.length + runner + PART_GAP.length + left.activity.length
 }
 
 function stateOf(index: number, current: number): StepState {
@@ -45,7 +57,7 @@ function windowOf(all: readonly StepSegment[], first: number, last: number): Ste
 // names the current step too.
 function stepChoices(view: WorkflowBanner): StepSegment[][] {
   const current = view.phases.indexOf(view.phase)
-  const all = view.phases.map((phase, index) => ({ label: index === current ? phaseText(view) : phase, state: stateOf(index, current) }))
+  const all = view.phases.map((phase, index) => ({ label: phase, state: stateOf(index, current) }))
   if (current === -1) return [all, []]
   const end = all.length - 1
   const windows: Array<[number, number]> = []
@@ -54,11 +66,14 @@ function stepChoices(view: WorkflowBanner): StepSegment[][] {
   return [...windows.filter(([first, last]) => last > first).map(([first, last]) => windowOf(all, first, last)), []]
 }
 
-function subStepText(view: WorkflowBanner): string {
+function headText(view: WorkflowBanner): string {
   const step = view.step
-  if (step === null) return phaseText(view)
-  const position = step.number === undefined || step.count === undefined ? '' : ` ${step.number}/${step.count}`
-  return `${phaseText(view)}${position}: ${step.name}`
+  const position = step?.number === undefined || step.count === undefined ? '' : ` ${step.number}/${step.count}`
+  return `${phaseText(view)}${position}`
+}
+
+function detailText(view: WorkflowBanner): string {
+  return view.step === null ? '' : `: ${view.step.name}`
 }
 
 function shortened(text: string, room: number): string {
@@ -66,29 +81,37 @@ function shortened(text: string, room: number): string {
 }
 
 // Drops steps until the line fits, then shortens the sub-step and drops the model, so whether the workflow waits for
-// the user always shows.
+// the user always shows. The divider stays, so the two sections stay apart.
 export function bandLine(view: WorkflowBanner, now: WorkflowActivity, columns: number): BandLine {
+  const head = headText(view)
+  const detail = detailText(view)
   const activity = ACTIVITY_TEXT[now]
-  const step = subStepText(view)
-  const withRunner = `${PART_GAP}${view.runner}${PART_GAP}`
-  const lead = `${step}${withRunner}`
-  const steps = stepChoices(view).find(choice => widthOf(choice) + lead.length + activity.length <= columns)
-  if (steps !== undefined) return { steps, lead, activity }
-  const room = columns - activity.length
-  const tail = room - withRunner.length >= SHORTEST_STEP ? withRunner : PART_GAP
-  return { steps: [], lead: `${shortened(step, room - tail.length)}${tail}`, activity }
+  const left = { head, detail, runner: view.runner, activity }
+  const steps = stepChoices(view).find(choice => leftWidth(left) + SECTION_GAP.length + rightWidth(choice) <= columns)
+  if (steps !== undefined) return { left, steps }
+  const room = columns - rightWidth([]) - SECTION_GAP.length - activity.length
+  const runner = room - (PART_GAP.length * 2 + view.runner.length) >= SHORTEST_STEP ? view.runner : ''
+  const tail = runner === '' ? PART_GAP.length : PART_GAP.length * 2 + runner.length
+  const text = shortened(`${head}${detail}`, room - tail)
+  return { left: { head: text.slice(0, head.length), detail: text.slice(head.length), runner, activity }, steps: [] }
 }
 
 function bandRow($: EngineInterface, e: RenderInput<'PromptHint' | 'AbovePrompt'>, line: BandLine, now: WorkflowActivity, width?: number) {
   const { Box, Text } = $.ui.resolve(e)
-  const segments = line.steps.flatMap((segment, index) => [...(index > 0 ? [STEP_GAP] : []), <Text {...STEP_LOOK[segment.state]}>{segment.label}</Text>])
-  const steps = segments.length === 0 ? [] : [...segments, <Text dimColor>{SECTION_GAP}</Text>]
+  const { left, steps } = line
+  const segments = steps.flatMap((segment, index) => [...(index > 0 ? [STEP_GAP] : []), <Text {...STEP_LOOK[segment.state]}>{stepText(segment)}</Text>])
   return (
-    <Box borderStyle="round" borderColor="subtle" paddingX={1} {...(width === undefined ? {} : { width })}>
+    <Box borderStyle="round" borderColor="subtle" paddingX={1} justifyContent="space-between" {...(width === undefined ? {} : { width })}>
       <Text wrap="truncate-end">
-        {steps}
-        <Text dimColor>{line.lead}</Text>
-        {now === 'waiting' ? <Text color="warning">{line.activity}</Text> : <Text dimColor>{line.activity}</Text>}
+        <Text weight="bold" color="claude">{left.head}</Text>
+        <Text color="text">{left.detail}</Text>
+        {left.runner === '' ? [] : [<Text color="subtle">{PART_GAP}</Text>, <Text color="permission">{left.runner}</Text>]}
+        <Text color="subtle">{PART_GAP}</Text>
+        <Text color={now === 'waiting' ? 'warning' : 'planMode'}>{left.activity}</Text>
+      </Text>
+      <Text>
+        <Text color="subtle">{DIVIDER}</Text>
+        {segments.length === 0 ? [] : [SECTION_GAP, ...segments]}
       </Text>
     </Box>
   )

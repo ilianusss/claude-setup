@@ -6,7 +6,7 @@ import { subSteps } from '../src/phases'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow, renderWorkflow } from '../src/state'
 import type { Workflow } from '../src/state'
-import { INTAKE_PHASE, PROMPT_HINT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { INTAKE_PHASE, INTAKE_POINTS, PROMPT_HINT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
 const INTAKE = buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0' }) })
@@ -23,7 +23,7 @@ async function bandText($: Engine): Promise<string> {
 
 describe('the sub-step names', () => {
   test('come from the numbered bold titles of the With the user section', () => {
-    expect(subSteps(INTAKE_PHASE)).toEqual(['ask', 'restate', 'save', 'gate'])
+    expect(subSteps(INTAKE_PHASE)).toEqual(['read', 'listen', 'fill the gaps', 'recommend models', 'gate'])
   })
 
   test('leave out the Agent section, nested lists and the trailing stop or colon', () => {
@@ -56,12 +56,12 @@ describe('mcp__workflow__progress', () => {
     const ran = await $.tool.call({ tool: 'mcp__workflow__progress', step: 2 })
 
     expect(ran.deny).toBeUndefined()
-    expect(text(ran)).toContain('restate')
+    expect(text(ran)).toContain('listen')
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '').step).toBe(2)
-    expect(await bandText($)).toContain('intake 2/4: restate')
+    expect(await bandText($)).toContain('intake 2/5: listen')
   })
 
-  for (const step of [0, 5, 2.5, -1]) {
+  for (const step of [0, 6, 2.5, -1]) {
     test(`refuses step ${step}, outside the phase's numbered steps, and changes nothing`, async ($, on) => {
       const fake = fakeEngine(on, INTAKE, 'feat/login')
       await start($)
@@ -69,7 +69,7 @@ describe('mcp__workflow__progress', () => {
 
       const ran = await $.tool.call({ tool: 'mcp__workflow__progress', step })
 
-      expect(ran.deny).toContain('1 to 4')
+      expect(ran.deny).toContain('1 to 5')
       expect(fake.files.get(STATE_FILE)).toBe(before)
     })
   }
@@ -81,7 +81,7 @@ describe('mcp__workflow__progress', () => {
 
     const ran = await $.tool.call({ tool: 'mcp__workflow__progress', step: '2' as unknown as number })
 
-    expect(ran.deny).toContain('1 to 4')
+    expect(ran.deny).toContain('1 to 5')
     expect(fake.files.get(STATE_FILE)).toBe(before)
   })
 
@@ -138,6 +138,7 @@ describe('the saved sub-step', () => {
     keepDocs: 'all',
     models: DEFAULT_PLAN,
     paths: [],
+    lanes: [],
     session: 's1',
     updated: '2026-10-22T10:00:00.000Z',
     goal: 'Users sign in.',
@@ -163,7 +164,7 @@ describe('the saved sub-step', () => {
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(await bandText($)).toContain('intake 3/4: save')
+    expect(await bandText($)).toContain('intake 3/5: fill the gaps')
   })
 
   test('is cleared when the phase changes', async ($, on) => {
@@ -171,7 +172,7 @@ describe('the saved sub-step', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'design' })
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '').step).toBeUndefined()

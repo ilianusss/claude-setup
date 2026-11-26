@@ -41,7 +41,7 @@ describe('the phase start line', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
 
     const lines = transcript(logged)
     expect(lines).toHaveLength(1)
@@ -67,7 +67,7 @@ describe('the phase start line', () => {
     fake.answers.push(GATE.wait)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
 
     expect(transcript(logged)).toEqual([])
   })
@@ -100,6 +100,28 @@ describe('the Leading the user rules', () => {
       expect(section).toContain('Next:')
     })
   }
+
+  test('keep what the user reads to answer inside the dialog: in the question or an option preview, never only in the text before it', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'design', slice: '0' }) }), 'feat/login')
+    await start($)
+
+    const prompt = await promptOf($, fake)
+    const section = prompt.slice(prompt.indexOf(LEADING))
+
+    expect(section).toContain('inside the AskUserQuestion dialog itself')
+    expect(section).toContain('`preview`')
+    expect(section).toContain('hides')
+  })
+
+  test('have the Next: line name the command the user has to type', async ($, on) => {
+    const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'design', slice: '0' }) }), 'feat/login')
+    await start($)
+
+    const prompt = await promptOf($, fake)
+    const section = prompt.slice(prompt.indexOf(LEADING))
+
+    expect(section).toContain('When the user has to type a command, the Next: line names it.')
+  })
 
   test('place the phase among the steps of this workflow', async ($, on) => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ phase: 'design', slice: '0' }) }), 'feat/login')

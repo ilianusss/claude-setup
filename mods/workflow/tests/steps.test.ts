@@ -344,7 +344,7 @@ describe('Stop here at a gate', () => {
     fake.answers.push(GATE.stop)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
 
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'slice', status: 'paused' })
   })
@@ -363,9 +363,9 @@ describe('Stop here at a gate', () => {
     const fake = fakeEngine(on, buildRepo({ [STATE_FILE]: stateText({ size: 'project', phase: 'spec', slice: '0' }) }), 'feat/login')
     fake.answers.push(GATE.stop, GATE.continue)
     await start($)
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Spec written.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Spec written.'] })
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
     const ran = await $.tool.call({ tool: 'Write', file_path: `${ROOT}/src/login.ts`, content: 'export {}' })
 
     expect(parseWorkflow(fake.files.get(STATE_FILE) ?? '')).toMatchObject({ phase: 'slice', status: 'active' })

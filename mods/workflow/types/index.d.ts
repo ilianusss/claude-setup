@@ -22,12 +22,21 @@ export type WorkflowBanner = {
   slice: { number: number; count: number } | null
   step: { name: string; number?: number; count?: number } | null
   runner: string
+  // The slices building in lanes, while a workflow that commits builds; the count is then of the slices done.
+  lanes: number[]
 }
 
 export type WorkflowVerified = { slug: string; slice: number }
 
 // The build agents whose run ends with a hand-over, by agentId, to the slug of the workflow they verified a slice of.
 export type WorkflowHandovers = Record<string, string>
+
+// The build agents running in a lane, by agentId: the workflow and the slice of the lane. A reservation for an agent
+// about to start carries the time it was made.
+// Whether the conversation's own loop runs a turn.
+export type WorkflowMainLoop = { isInTurn: boolean }
+
+export type WorkflowLaneAgents = Record<string, { slug: string; slice: number; reservedAt?: number }>
 
 declare module 'claude-code' {
   // The mod's own tools, declared here because the generated MCP types list only the tools of the session that last
@@ -51,6 +60,9 @@ declare module 'claude-code' {
       verified: Shaped<WorkflowVerified | null>
       enteredWorktree: Shaped<string | null>
       handovers: Shaped<WorkflowHandovers>
+      laneAgents: Shaped<WorkflowLaneAgents>
+      queuedHandovers: Shaped<string[]>
+      mainLoop: Shaped<WorkflowMainLoop>
     }
   }
 }

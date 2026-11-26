@@ -10,7 +10,7 @@ import { findRepo, git, relativeTo, treeHash } from './repo'
 import type { Repo } from './repo'
 import type { Workflow } from './state'
 import { refreshStatus } from './status'
-import { listWorkflows, pathsFor, readLock } from './store'
+import { laneKey, listWorkflows, pathsFor, readLock } from './store'
 
 function allowedWrites(scope: readonly string[]): string {
   return scope.length > 0 ? `may only write ${scope.join(', ')}` : 'writes no file in the repo'
@@ -22,13 +22,16 @@ async function writeRefusal($: EngineInterface, path: string): Promise<string | 
   if (relativeTo(context.paths.dir, path) !== undefined) {
     return `workflow: only the workflow mod writes ${context.paths.dir}. Update the handoff with mcp__workflow__handoff; phases move with mcp__workflow__advance.`
   }
-  const workflow = context.current
+  const { current: workflow, lane } = context
+  if (lane !== undefined && relativeTo(lane.worktree, path) === undefined) {
+    return `workflow: this agent builds slice ${lane.slice} in its lane ${lane.worktree}, and writes only there: ${path} is outside it. The workflow's worktree and the other lanes belong to the conversation and their own agents.`
+  }
   const file = relativeTo(context.repo.root, path)
   if (workflow === undefined || file === undefined) return undefined
 
   let lock
   try {
-    lock = await readLock($, context.paths, workflow.slug)
+    lock = await readLock($, context.paths, lane === undefined ? workflow.slug : laneKey(workflow.slug, lane.slice))
   } catch (error) {
     return `workflow: ${describe(error)}`
   }

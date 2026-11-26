@@ -4,7 +4,7 @@ import type { EngineInterface, On } from 'claude-code'
 import type { WorkflowPicker } from '../types'
 import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
-import { day, iso, submitLater } from './clock'
+import { day, iso } from './clock'
 import { loadContext } from './context'
 import type { Context } from './context'
 import { PICKER } from './labels'
@@ -26,12 +26,12 @@ import {
   withRecommendations,
 } from './plan'
 import type { ModelChoice, ModelPlan, Recommendation, Step } from './plan'
-import { phasePrompt } from './prompts'
+import { fillContinue } from './prompts'
 import { describe } from './refusal'
 import { withLog } from './state'
 import type { Workflow } from './state'
 import { setActivity } from './status'
-import { saveWorkflow } from './store'
+import { updateWorkflow } from './store'
 
 export const PICKER_PANE = 'workflow-models'
 
@@ -93,9 +93,7 @@ export async function savePlan($: EngineInterface, context: Context, workflow: W
   const changed = STEPS.filter(step => !isSameChoice(workflow.models[step], plan[step]))
   if (changed.length === 0) return workflow
   const entry = `models changed: ${changed.map(step => `${step} ${describeChoice(plan[step])}`).join(', ')}`
-  const saved = withLog({ ...workflow, models: plan, updated: iso(now) }, day(now), entry)
-  await saveWorkflow($, context.repo, context.paths, saved)
-  return saved
+  return updateWorkflow($, context.paths, workflow.slug, current => withLog({ ...current, models: plan, updated: iso(now) }, day(now), entry))
 }
 
 export async function rememberRecommendations($: EngineInterface, slug: string, recommendations: readonly Recommendation[]): Promise<void> {
@@ -204,7 +202,7 @@ async function finishPicker($: EngineInterface, outcome: 'use' | 'cancel'): Prom
     const saved = outcome === 'use' ? await savePlan($, context, workflow, parsePlan(state.plan), await $.clock.now()) : workflow
     if (saved !== workflow) await registerAgents($)
     if (state.then === 'phase') {
-      submitLater($, `The user has chosen the models in the Models panel. Go on with the ${saved.phase} phase:\n\n${await phasePrompt($, context, saved)}`)
+      await fillContinue($)
     } else if (saved !== workflow) {
       $.ui.toast(`Saved the models of "${saved.slug}".`)
     }

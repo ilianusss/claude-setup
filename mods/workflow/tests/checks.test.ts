@@ -11,6 +11,7 @@ const CONFIG: Config = {
   testLevel: undefined,
   specsDir: 'docs/specs',
   packages: [],
+  worktreeSetup: undefined,
 }
 
 describe('testFilesCommands', () => {

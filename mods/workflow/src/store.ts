@@ -14,6 +14,8 @@ type IndexEntry = { root: string; slug: string; title: string; phase: Phase; sta
 const INDEX_KEY = 'index'
 const KEPT_RUNS = 30
 
+const queues = new Map<string, Promise<unknown>>()
+
 export function pathsFor(repo: Repo): Paths {
   const dir = `${repo.commonDir}/claude-workflow`
   return { dir, locks: `${dir}/locks`, runs: `${dir}/runs`, treeIndex: `${dir}/tree-index` }
@@ -54,20 +56,82 @@ export async function openWorkflowsEverywhere($: EngineInterface): Promise<Index
   return Object.values(index).sort((a, b) => b.updated.localeCompare(a.updated))
 }
 
-export async function saveWorkflow($: EngineInterface, repo: Repo, paths: Paths, workflow: Workflow): Promise<void> {
+// The index keys a workflow by its worktree, whichever checkout saved it: a lane saves the state too.
+export async function saveWorkflow($: EngineInterface, paths: Paths, workflow: Workflow): Promise<void> {
   await $.fs.write(`${paths.dir}/${workflow.slug}.md`, renderWorkflow(workflow))
   const index = await readIndex($)
-  const key = `${repo.root}#${workflow.slug}`
+  const key = `${workflow.worktree}#${workflow.slug}`
   if (workflow.status === 'done' || workflow.status === 'abandoned') delete index[key]
   else {
     const { slug, title, phase, status, updated } = workflow
-    index[key] = { root: repo.root, slug, title, phase, status, updated }
+    index[key] = { root: workflow.worktree, slug, title, phase, status, updated }
   }
   await $.store.set(INDEX_KEY, index)
 }
 
-function lockPath(paths: Paths, slug: string): string {
-  return `${paths.locks}/${slug}.json`
+export async function readWorkflow($: EngineInterface, paths: Paths, slug: string): Promise<Workflow> {
+  return parseWorkflow(await $.fs.read(`${paths.dir}/${slug}.md`))
+}
+
+function oneAtATime<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const done = (queues.get(key) ?? Promise.resolve()).then(work)
+  queues.set(
+    key,
+    done.catch(() => undefined),
+  )
+  return done
+}
+
+// Parallel lanes lock and verify at the same time, and two read-modify-writes of one state file would drop one change:
+// the updates of a workflow run one after the other, each on the state the last one saved.
+export function updateWorkflow(
+  $: EngineInterface,
+  paths: Paths,
+  slug: string,
+  change: (workflow: Workflow) => Workflow,
+): Promise<Workflow> {
+  return oneAtATime(`state:${paths.dir}/${slug}`, async () => {
+    const workflow = change(await readWorkflow($, paths, slug))
+    await saveWorkflow($, paths, workflow)
+    return workflow
+  })
+}
+
+// Work on a workflow's branch and files that must not interleave with another of its kind, such as two lane merges:
+// one would read slices.md or the lock before the other saved them. It updates the state through updateWorkflow, whose
+// queue is apart from this one.
+export function withWorkflow<T>(paths: Paths, slug: string, work: () => Promise<T>): Promise<T> {
+  return oneAtATime(`work:${paths.dir}/${slug}`, work)
+}
+
+// A lane has its own lock, runs and tree index, so lanes building at the same time never share one: two `git add -A`
+// on one index file race. They live under `lanes/`, a folder no slug names, so no workflow's own file is a lane's.
+export function laneKey(slug: string, slice: number): string {
+  if (!isPlainSlug(slug)) throw new Error(`"${slug}" is not a plain file name`)
+  if (!Number.isInteger(slice) || slice < 1) throw new Error(`slice ${slice} is not a positive whole number`)
+  return `lanes/${slug}/${slice}`
+}
+
+// The workflow lock as it stood when the lane was made, which the lane's worktree holds: its first lock starts from it.
+export function seedKey(slug: string, slice: number): string {
+  return `${laneKey(slug, slice)}.seed`
+}
+
+// Where a lane merges the versions of a locked test: a folder of its own, so lanes never share the files.
+export function mergeFolderOf(paths: Paths, key: string): string {
+  return `${paths.dir}/merge-file/${key}`
+}
+
+export function treeIndexOf(paths: Paths, key: string | undefined): string {
+  return key === undefined ? paths.treeIndex : `${paths.dir}/${key}.index`
+}
+
+function lockPath(paths: Paths, key: string): string {
+  return `${paths.locks}/${key}.json`
+}
+
+function laneFiles(paths: Paths, key: string): string[] {
+  return [lockPath(paths, key), lockPath(paths, `${key}.seed`), `${paths.runs}/${key}.json`, treeIndexOf(paths, key)]
 }
 
 // The slug names the files rm deletes: a separator or a leading dot would reach outside the state folder.
@@ -77,20 +141,42 @@ export function isPlainSlug(slug: string): boolean {
   return PLAIN_SLUG.test(slug)
 }
 
-// The index keys a workflow by the checkout that saved it, its worktree or the main checkout: `roots` names them all.
-export async function deleteWorkflow($: EngineInterface, paths: Paths, slug: string, roots: readonly string[]): Promise<void> {
+async function removeFiles($: EngineInterface, slug: string, files: readonly string[]): Promise<void> {
   if (!isPlainSlug(slug)) throw new Error(`"${slug}" is not a plain file name`)
-  const files = [`${paths.dir}/${slug}.md`, lockPath(paths, slug), `${paths.runs}/${slug}.json`]
   const removed = await $.process.run(['rm', '-f', '--', ...files])
   if (removed.exitCode !== 0) throw new Error(`rm could not delete the files of "${slug}": ${removed.stderr.trim()}`)
-  await $.store.delete(`lock:${lockPath(paths, slug)}`)
+}
+
+export async function deleteLaneFiles($: EngineInterface, paths: Paths, slug: string, slice: number): Promise<void> {
+  const key = laneKey(slug, slice)
+  await removeFiles($, slug, laneFiles(paths, key))
+  for (const locked of [key, `${key}.seed`]) await $.store.delete(`lock:${lockPath(paths, locked)}`)
+}
+
+// The index keys a workflow by the checkout that saved it, its worktree or the main checkout: `roots` names them all.
+export async function deleteWorkflow(
+  $: EngineInterface,
+  paths: Paths,
+  workflow: Pick<Workflow, 'slug' | 'lanes'>,
+  roots: readonly string[],
+): Promise<void> {
+  const { slug } = workflow
+  const lanes = workflow.lanes.map(lane => laneKey(slug, lane.slice))
+  await removeFiles($, slug, [`${paths.dir}/${slug}.md`, lockPath(paths, slug), `${paths.runs}/${slug}.json`, ...lanes.flatMap(key => laneFiles(paths, key))])
+  for (const key of [slug, ...lanes, ...lanes.map(lane => `${lane}.seed`)]) await $.store.delete(`lock:${lockPath(paths, key)}`)
   const index = await readIndex($)
   for (const [key, entry] of Object.entries(index)) if (entry.slug === slug && roots.includes(entry.root)) delete index[key]
   await $.store.set(INDEX_KEY, index)
 }
 
-export async function readLock($: EngineInterface, paths: Paths, slug: string): Promise<Lock | undefined> {
-  const path = lockPath(paths, slug)
+// A workflow that commits builds its slices in lanes, once the slice it may have locked in its own worktree before
+// lanes existed is verified.
+export async function buildsInLanes($: EngineInterface, paths: Paths, workflow: Workflow): Promise<boolean> {
+  return workflow.commits && (await readLock($, paths, workflow.slug))?.phase !== 'green'
+}
+
+export async function readLock($: EngineInterface, paths: Paths, key: string): Promise<Lock | undefined> {
+  const path = lockPath(paths, key)
   let text: string
   try {
     text = await $.fs.read(path)
@@ -100,29 +186,29 @@ export async function readLock($: EngineInterface, paths: Paths, slug: string): 
   const fingerprint = await $.store.get(`lock:${path}`)
   if (fingerprint !== (await sha256(text))) {
     throw new Error(
-      `the lock of "${slug}" changed outside the workflow mod (${path}). Nothing was unlocked: ask the user to check it, and to delete it if they want to lock the slice again.`,
+      `the lock of "${key}" changed outside the workflow mod (${path}). Nothing was unlocked: ask the user to check it, and to delete it if they want to lock the slice again.`,
     )
   }
   return parseLock(text)
 }
 
-export async function saveLock($: EngineInterface, paths: Paths, lock: Lock): Promise<void> {
-  const path = lockPath(paths, lock.slug)
+export async function saveLock($: EngineInterface, paths: Paths, key: string, lock: Lock): Promise<void> {
+  const path = lockPath(paths, key)
   const text = renderLock(lock)
   await $.fs.write(path, text)
   await $.store.set(`lock:${path}`, await sha256(text))
 }
 
-export async function readRuns($: EngineInterface, paths: Paths, slug: string): Promise<Run[]> {
+export async function readRuns($: EngineInterface, paths: Paths, key: string): Promise<Run[]> {
   try {
-    const runs: unknown = JSON.parse(await $.fs.read(`${paths.runs}/${slug}.json`))
+    const runs: unknown = JSON.parse(await $.fs.read(`${paths.runs}/${key}.json`))
     return Array.isArray(runs) ? (runs as Run[]) : []
   } catch {
     return []
   }
 }
 
-export async function addRun($: EngineInterface, paths: Paths, slug: string, run: Run): Promise<void> {
-  const runs = [...(await readRuns($, paths, slug)), run].slice(-KEPT_RUNS)
-  await $.fs.write(`${paths.runs}/${slug}.json`, `${JSON.stringify(runs, null, 2)}\n`)
+export async function addRun($: EngineInterface, paths: Paths, key: string, run: Run): Promise<void> {
+  const runs = [...(await readRuns($, paths, key)), run].slice(-KEPT_RUNS)
+  await $.fs.write(`${paths.runs}/${key}.json`, `${JSON.stringify(runs, null, 2)}\n`)
 }

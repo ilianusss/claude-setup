@@ -28,6 +28,7 @@ const WORKFLOW: Workflow = {
   keepDocs: 'all',
   models: DEFAULT_PLAN,
   paths: [],
+  lanes: [],
   session: 's1',
   updated: '2026-10-22T10:00:00.000Z',
   goal: 'Users sign in.',
@@ -185,7 +186,7 @@ describe('leaving inspect', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Pull request drafted.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Pull request drafted.'] })
 
     expect(state(fake).phase).toBe('retro')
     expect(reviewRoundOf(state(fake))).toBe(0)
@@ -247,13 +248,13 @@ describe('workflow:build in inspect', () => {
     expect(prompt).not.toContain('## This slice')
   })
 
-  test('in the build phase holds the slice and no fixing instructions', async ($, on) => {
+  test('in the build phase holds the checks and no fixing instructions', async ($, on) => {
     const fake = fakeEngine(on, buildRepo(), 'feat/login')
 
     await start($)
 
     const prompt = agent(fake, 'build')?.prompt ?? ''
-    expect(prompt).toContain('## This slice')
+    expect(prompt).toContain('## Checks')
     expect(prompt).not.toContain('## Fixing review findings')
   })
 })

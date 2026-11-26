@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { buildAgentSpec } from '../src/agents'
 import { GATE, SWITCH } from '../src/labels'
-import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, spawnAgent, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const WITHHELD = ['mcp__workflow__advance', 'mcp__workflow__handoff', 'mcp__workflow__unlock', 'AskUserQuestion']
@@ -83,15 +83,17 @@ describe('registering workflow:build', () => {
     expect(lastSection(prompt).startsWith('Report')).toBe(true)
   })
 
-  test('its prompt names the slice to build and the checks to run', async ($, on) => {
+  test('its prompt names the checks to run, and the spawn of a slice gives it that slice', async ($, on) => {
     const fake = fakeEngine(on, buildRepo(), 'feat/login')
-
     await start($)
 
+    await spawnAgent($, 'Build slice 1 of `login`.')
+
     const prompt = buildSpec(fake)?.prompt ?? ''
-    expect(prompt).toContain('Slice 1: Walking skeleton')
-    expect(prompt).toContain('Form and route.')
     expect(prompt).toContain('`pnpm lint`, `pnpm tsc --noEmit`, `pnpm test`')
+    expect(prompt).not.toContain('Form and route.')
+    expect(fake.spawns.at(-1)?.prompt).toContain('Slice 1: Walking skeleton')
+    expect(fake.spawns.at(-1)?.prompt).toContain('Form and route.')
   })
 
   test('a workflow in another phase registers it too, with the other agents of its size', async ($, on) => {
@@ -115,10 +117,11 @@ describe('registering workflow:build', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two slices.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Two slices.'] })
+    await spawnAgent($, 'Build slice 1 of `login`.')
 
     expect(buildSpec(fake)?.name).toBe('build')
-    expect(buildSpec(fake)?.prompt).toContain('Slice 1: Walking skeleton')
+    expect(fake.spawns.at(-1)?.prompt).toContain('Slice 1: Walking skeleton')
   })
 
   test('switching to the workflow branch with /workflow continue registers it', async ($, on) => {
@@ -140,8 +143,9 @@ describe('registering workflow:build', () => {
     for (const command of CHECKS) await bash($, fake, command, 0)
 
     await $.tool.call({ tool: 'mcp__workflow__verify' })
+    await spawnAgent($, 'Build slice 2 of `login`.')
 
-    expect(buildSpec(fake)?.prompt).toContain('Slice 2: Password check')
+    expect(fake.spawns.at(-1)?.prompt).toContain('Slice 2: Password check')
   })
 })
 

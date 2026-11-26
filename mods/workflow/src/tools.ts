@@ -3,10 +3,11 @@ import type { EngineInterface, On, RegisteredToolSpec } from 'claude-code'
 
 import { registerAgents } from './agents'
 import { askOrUndefined } from './ask'
-import { lockSlice, nextStep, unlockFile, verifiedForAgent, verifiedForConversation, verifySlice } from './build'
-import { day, iso, submitLater } from './clock'
+import { lockSlice, nextStep, unlockFile, verifiedForAgent, verifiedForConversation, verifiedInLane, verifySlice } from './build'
+import { day, iso } from './clock'
 import { loadContext, readSlices } from './context'
 import type { Context } from './context'
+import { gateQuestion, goalOf, parseGateSummary } from './gate'
 import { GATE, MODELS } from './labels'
 import { asksAtGate, readPhase, stepsOf } from './phases'
 import { chooseModels, rememberRecommendations, savePlan } from './picker'
@@ -21,15 +22,18 @@ import {
   withRecommendations,
 } from './plan'
 import type { ModelPlan, Recommendation, Step } from './plan'
-import { NEXT_IN_ITS_OWN_TURN, phasePrompt, stopPrompt } from './prompts'
+import { endWithContinue, fillContinue, stopPrompt } from './prompts'
 import { Refusal, describe, refuse } from './refusal'
-import { finish, offerEnding, rememberEnteredWorktree } from './ending'
+import { finish, offerEnding, rememberEnteredWorktree, removeLanes } from './ending'
+import { handOverWhenIdle, mainTurnEnded, mainTurnStarted } from './handover'
+import { endLane } from './lanes'
 import { endReviewRound } from './review'
 import type { Runtime } from './runtime'
+import { waves } from './slices'
 import { inPhase, phaseAfter, withLog } from './state'
 import type { Workflow } from './state'
 import { announcePhase, clearVerified, markVerified, refreshStatus, turnEnded } from './status'
-import { saveWorkflow } from './store'
+import { updateWorkflow } from './store'
 
 // Kept in $.state, which a reload of the mod keeps, so a build agent that verified a slice before a reload still hands
 // over when its run ends after it.
@@ -51,10 +55,6 @@ const TOOLS: readonly RegisteredToolSpec[] = [
           items: { type: 'string' },
           description: 'The folders this workflow touches, relative to the repo root. Set it in the design phase; the drift check watches them.',
         },
-        goal: {
-          type: 'string',
-          description: 'The goal the user confirmed in the intake, as restated to them. Accepted in the intake phase only.',
-        },
       },
       required: ['stopped', 'next'],
     },
@@ -63,11 +63,35 @@ const TOOLS: readonly RegisteredToolSpec[] = [
   {
     name: 'advance',
     description:
-      "Ask the user to approve the current phase and move the workflow to its next phase. The user answers in Claude Code's own dialog. Give a short summary of what the phase produced.",
+      "Ask the user to approve the current phase and move the workflow to its next phase. The user answers in Claude Code's own dialog, which shows what you pass here: the mod builds the question from these fields, so write each item as one short line. At the intake the gate is the restatement: the user confirms or corrects the five points in it.",
     inputSchema: {
       type: 'object',
       properties: {
-        summary: { type: 'string', description: 'What the phase produced, for the user to approve.' },
+        produced: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Every phase but the intake, required, at least one item: what the phase produced, one short line each.',
+        },
+        decisions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Every phase but the intake: the decisions taken in it, one short line each.',
+        },
+        risks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Every phase but the intake: the main risks the user accepts by approving, one short line each.',
+        },
+        open: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Every phase but the intake: the questions still open, one short line each.',
+        },
+        problem: { type: 'string', description: 'The intake only, required: what is wrong or missing today, and for whom. "not stated" when the user left it open.' },
+        result: { type: 'string', description: 'The intake only, required: what exists once this workflow is done. "not stated" when the user left it open.' },
+        success: { type: 'string', description: 'The intake only, required: what the user will see, run or measure to know it worked. "not stated" when the user left it open.' },
+        limits: { type: 'string', description: 'The intake only, required: time, technology, compatibility, and what must not change. "not stated" when the user left it open.' },
+        outOfScope: { type: 'string', description: 'The intake only, required: what this workflow will not do. "not stated" when the user left it open.' },
         recommendations: {
           type: 'array',
           description:
@@ -84,7 +108,6 @@ const TOOLS: readonly RegisteredToolSpec[] = [
           },
         },
       },
-      required: ['summary'],
     },
     isDeferred: false,
   },
@@ -161,19 +184,14 @@ function currentOf(context: Context): Workflow {
 
 async function handoff($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
   const workflow = currentOf(context)
-  const hasGoal = input.goal !== undefined
-  if (hasGoal && workflow.phase !== 'intake') {
-    refuse(`the goal is set in the intake phase only, and "${workflow.slug}" is in its ${workflow.phase} phase: call mcp__workflow__handoff again without it.`)
-  }
-  await saveWorkflow($, context.repo, context.paths, {
-    ...workflow,
-    goal: hasGoal ? textInput(input, 'goal') : workflow.goal,
+  await updateWorkflow($, context.paths, workflow.slug, current => ({
+    ...current,
     stopped: textInput(input, 'stopped'),
     next: textInput(input, 'next'),
     questions: listInput(input, 'questions') ?? [],
-    paths: listInput(input, 'paths') ?? workflow.paths,
+    paths: listInput(input, 'paths') ?? current.paths,
     updated: iso(now),
-  })
+  }))
   return 'Saved the handoff.'
 }
 
@@ -220,22 +238,41 @@ function modelsNotAsked(plan: ModelPlan, steps: readonly Step[]): string {
 }
 
 function choosingPrompt(workflow: Workflow): string {
-  return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase. The user is choosing each step's model and effort in the Models panel. End your turn now, with a Next: line saying they choose the models in the panel: the mod sends you the ${workflow.phase} phase prompt once they confirm or cancel.`
+  return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase. The user is choosing each step's model and effort in the Models panel. End your turn now, with a line starting "Next:" that says they choose the models in the panel, then run \`/workflow continue\` to start the ${workflow.phase} phase: the mod puts it in their prompt box once they confirm or cancel, and they press Enter. Never say the user has nothing to do.`
 }
 
 function stopWhileChoosing(workflow: Workflow): string {
   return `Approved: "${workflow.slug}" is now in its ${workflow.phase} phase, and the user stops here once they have chosen each step's model and effort in the Models panel. ${stopPrompt(workflow)}`
 }
 
+function notReady(workflow: Workflow, answer: string): string {
+  const notReadyToLeave = `The user is not ready to leave the ${workflow.phase} phase (${answer}).`
+  if (workflow.phase !== 'intake') return `${notReadyToLeave} Ask what should change.`
+  return `${notReadyToLeave} Their answer corrects the restatement: amend the restatement from it, then call mcp__workflow__advance again. When the answer is only "Not yet", ask what should change first.`
+}
+
+async function refuseBadDependencies($: EngineInterface, context: Context, workflow: Workflow): Promise<void> {
+  if (workflow.phase !== 'slice') return
+  const graph = waves(await readSlices($, context, workflow))
+  if ('errors' in graph) {
+    refuse(
+      `slices.md has a bad dependency graph, and nothing moved: ${graph.errors.join('; ')}. Fix the Depends on lines of slices.md (or spawn workflow:slice to fix them), then call mcp__workflow__advance again.`,
+    )
+  }
+}
+
 async function advance($: EngineInterface, runtime: Runtime, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
   const workflow = currentOf(context)
   if (workflow.phase === 'build') {
-    refuse('the build phase moves on by itself: each slice closes with mcp__workflow__verify, and the last one moves the workflow to inspect.')
+    refuse(
+      'the build phase moves on by itself: each slice closes with mcp__workflow__verify (and, when the workflow commits, the merge of its lane), and the last one moves the workflow to inspect.',
+    )
   }
   if (workflow.phase === 'done') refuse(`the workflow "${workflow.slug}" is done.`)
+  const summary = parseGateSummary(workflow.phase, workflow.slug, input)
+  await refuseBadDependencies($, context, workflow)
   const recommendations = recommendationsOf(context, workflow, input)
   if (input.recommendations !== undefined) await rememberRecommendations($, workflow.slug, recommendations)
-  const summary = textInput(input, 'summary')
   const target = phaseAfter(workflow.size, workflow.phase, context.config === undefined)
   let slice = workflow.slice
   if (target === 'build') {
@@ -248,14 +285,14 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   const answer = isAsked
     ? await askOrUndefined(
         $,
-        `Approve the ${workflow.phase} phase of "${workflow.slug}" and move to ${target}?\n\n${summary}`,
+        gateQuestion(summary, workflow.phase, workflow.slug, target),
         [GATE.continue, GATE.stop, GATE.wait],
         'Gate',
       )
     : GATE.continue
   if (answer === undefined) return `The user closed the dialog: "${workflow.slug}" stays in its ${workflow.phase} phase.`
   if (answer !== GATE.continue && answer !== GATE.stop) {
-    return `The user is not ready to leave the ${workflow.phase} phase (${answer}). Ask what should change.`
+    return notReady(workflow, answer)
   }
 
   const isStopping = answer === GATE.stop
@@ -268,8 +305,9 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   ].join(' ')
   const approval = isAsked ? `${workflow.phase} approved` : `${workflow.phase} approved without asking (technical decisions are off)`
   const status = target === 'done' ? 'done' : isStopping ? 'paused' : 'active'
-  let moved: Workflow = withLog({ ...inPhase(workflow, target), slice, status, updated: iso(now) }, day(now), approval)
-  await saveWorkflow($, context.repo, context.paths, moved)
+  let moved = await updateWorkflow($, context.paths, workflow.slug, current =>
+    withLog({ ...inPhase(current, target), goal: goalOf(summary) ?? current.goal, slice, status, updated: iso(now) }, day(now), approval),
+  )
   if (!isStopping) announcePhase($, moved)
   if (choice !== 'per step') moved = await savePlan($, context, moved, choice, now)
   else {
@@ -285,14 +323,14 @@ async function advance($: EngineInterface, runtime: Runtime, context: Context, i
   await registerAgents($)
   const approved = notes === '' ? 'Approved:' : `${notes} Approved:`
   if (target === 'done') {
-    const closed = `${approved} "${workflow.slug}" is done. \`/workflow delete ${workflow.slug}\` deletes it from the list once the user no longer needs it.`
+    const lanes = await removeLanes($, context, moved, now)
+    const closed = `${approved} "${workflow.slug}" is done.${lanes === '' ? '' : ` ${lanes}`} \`/workflow delete ${workflow.slug}\` deletes it from the list once the user no longer needs it.`
     const ending = await offerEnding($, runtime, context, moved, now)
     if (ending.kind === 'leave') return `${closed}\n\n${ending.prompt}`
     return ending.kind === 'cancelled' || ending.text === '' ? closed : `${closed} ${ending.text}`
   }
   if (isStopping) return `${approved} "${workflow.slug}" is now in its ${target} phase, and the user stops here. ${stopPrompt(moved)}`
-  submitLater($, `The ${target} phase of "${workflow.slug}" starts now. Go on with it in this conversation:\n\n${await phasePrompt($, context, moved)}`)
-  return `${approved} "${workflow.slug}" is now in its ${target} phase. ${NEXT_IN_ITS_OWN_TURN} End your turn now, with a Next: line saying the ${target} phase starts right away.`
+  return `${approved} "${workflow.slug}" is now in its ${target} phase. ${endWithContinue(`start the ${target} phase`, await fillContinue($))}`
 }
 
 async function progress($: EngineInterface, context: Context, input: Record<string, unknown>, now: number): Promise<string> {
@@ -307,7 +345,7 @@ async function progress($: EngineInterface, context: Context, input: Record<stri
       `step must be a whole number from 1 to ${steps.length}, a numbered step of the ${workflow.phase} phase's "With the user" section; got ${JSON.stringify(step)}. Nothing changed.`,
     )
   }
-  await saveWorkflow($, context.repo, context.paths, { ...workflow, step, updated: iso(now) })
+  await updateWorkflow($, context.paths, workflow.slug, current => ({ ...current, step, updated: iso(now) }))
   return `Step ${step} of ${steps.length} of the ${workflow.phase} phase: ${steps[step - 1]}.`
 }
 
@@ -373,7 +411,9 @@ async function lockTool($: EngineInterface): Promise<ToolAnswer> {
 async function verifyTool($: EngineInterface, agentId: string | undefined): Promise<ToolAnswer> {
   try {
     const context = await contextOf($)
-    const verified = await verifySlice($, context, await $.clock.now())
+    const outcome = await verifySlice($, context, await $.clock.now())
+    if (outcome.kind === 'lane') return await answered($, verifiedInLane(outcome.verified, context))
+    const verified = outcome.verified
     if (verified.advanced.phase === 'inspect') announcePhase($, verified.advanced)
     else await markVerified($, verified.advanced, verified.slice)
     await registerAgents($)
@@ -401,7 +441,7 @@ async function handOver($: EngineInterface, agentId: string): Promise<void> {
     const context = await contextOf($)
     const workflow = context.workflows.find(candidate => candidate.slug === slug)
     if (workflow === undefined) return
-    submitLater($, `The \`workflow:build\` agent's run has ended after a verified slice of \`${slug}\`. Next:\n\n${(await nextStep($, context, workflow)).text}`)
+    await handOverWhenIdle($, `The \`workflow:build\` agent's run has ended after a verified slice of \`${slug}\`. Next:\n\n${(await nextStep($, context, workflow)).text}`)
     await refreshStatus($)
   } catch (error) {
     $.ui.log(`workflow: the next step after workflow:build could not be handed over: ${describe(error)}`, { to: 'debug' })
@@ -452,13 +492,20 @@ export function registerToolHandlers(on: On, runtime: Runtime): void {
     }
     return entered
   })
+  on('turn.start', async ($, e, next) => {
+    const started = await next(e)
+    if (e.agentId === undefined) await mainTurnStarted($)
+    return started
+  })
   on('turn.complete', async ($, e, next) => {
     const ended = await next(e)
     if (e.agentId !== undefined) {
       await handOver($, e.agentId)
+      await endLane($, e.agentId)
       await endReviewRound($, { reason: e.reason, agentId: e.agentId })
     } else {
       await turnEnded($)
+      await mainTurnEnded($)
     }
     return ended
   })

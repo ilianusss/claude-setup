@@ -20,8 +20,12 @@ const SEQUENCES: Readonly<Record<Size, readonly Phase[]>> = {
   project: ['intake', 'spec', 'design', 'slice', 'build', 'inspect', 'retro', 'done'],
 }
 export const MAX_REVIEW_ROUNDS = 3
+export const MAX_LANES = 3
 const LOG_LENGTH = 10
 const SLUG_WORDS = 5
+
+// A slice building in its own worktree and branch, beside the workflow's, until the mod merges it.
+export type Lane = { slice: number; branch: string; worktree: string; verified: boolean }
 
 export type Workflow = {
   slug: string
@@ -41,6 +45,7 @@ export type Workflow = {
   keepDocs: KeepDocs
   models: ModelPlan
   paths: string[]
+  lanes: Lane[]
   session: string
   updated: string
   goal: string
@@ -94,6 +99,25 @@ function list(data: Frontmatter, key: string): string[] {
   return typeof value === 'string' ? [value] : [...value]
 }
 
+const LANE_ENTRY = /^(\d+) (building|verified)$/
+
+// A lane's branch and worktree follow from the workflow's, so the state line keeps only the slice and whether it is verified.
+export function laneOf(workflow: Pick<Workflow, 'branch' | 'worktree'>, slice: number): Lane {
+  return { slice, branch: `${workflow.branch}-s${slice}`, worktree: `${workflow.worktree}-s${slice}`, verified: false }
+}
+
+function lanesOf(data: Frontmatter, feature: Pick<Workflow, 'branch' | 'worktree'>): Lane[] {
+  return list(data, 'lanes').map(entry => {
+    const match = LANE_ENTRY.exec(entry)
+    if (match === null) throw new Error(`lanes has "${entry}", expected "<slice> building" or "<slice> verified"`)
+    return { ...laneOf(feature, Number(match[1])), verified: match[2] === 'verified' }
+  })
+}
+
+function renderLanes(lanes: readonly Lane[]): string[] {
+  return lanes.map(lane => `${lane.slice} ${lane.verified ? 'verified' : 'building'}`)
+}
+
 function bodySections(body: string): Map<string, string> {
   const found = new Map<string, string>()
   let heading: string | undefined
@@ -128,6 +152,7 @@ export function parseWorkflow(markdown: string): Workflow {
   const sections = bodySections(body)
   const step = positive(data, 'step')
   const reviewRound = positive(data, 'review_round')
+  const feature = { branch: text(data, 'branch'), worktree: text(data, 'worktree') }
   return {
     slug: text(data, 'slug'),
     title: text(data, 'title'),
@@ -146,6 +171,7 @@ export function parseWorkflow(markdown: string): Workflow {
     keepDocs: keepDocsOf(data),
     models: parsePlan(list(data, 'models')),
     paths: list(data, 'paths'),
+    lanes: lanesOf(data, feature),
     session: text(data, 'session'),
     updated: text(data, 'updated'),
     goal: sections.get('Goal') ?? '',
@@ -184,6 +210,7 @@ export function renderWorkflow(workflow: Workflow): string {
     keep_docs: workflow.keepDocs,
     models: renderPlan(workflow.models),
     paths: workflow.paths,
+    ...(workflow.lanes.length === 0 ? {} : { lanes: renderLanes(workflow.lanes) }),
     session: workflow.session,
     updated: workflow.updated,
   }

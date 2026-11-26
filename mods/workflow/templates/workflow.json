@@ -11,5 +11,6 @@
   },
   "testLevel": "personal app, deployed",
   "specsDir": "docs/specs",
-  "packages": []
+  "packages": [],
+  "worktreeSetup": "pnpm install --frozen-lockfile"
 }

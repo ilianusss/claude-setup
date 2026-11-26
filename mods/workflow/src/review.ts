@@ -5,7 +5,7 @@ import { loadContext } from './context'
 import { describe } from './refusal'
 import { MAX_REVIEW_ROUNDS, reviewRoundOf, withLog } from './state'
 import { refreshStatus } from './status'
-import { saveWorkflow } from './store'
+import { updateWorkflow } from './store'
 
 const REVIEW_AGENT = 'workflow:review'
 
@@ -25,7 +25,9 @@ export async function endReviewRound($: EngineInterface, ended: AgentRunEnd): Pr
     if (!(await isReviewRun($, ended.agentId))) return
     const round = reviewRoundOf(workflow) + 1
     const now = await $.clock.now()
-    await saveWorkflow($, context.repo, context.paths, withLog({ ...workflow, reviewRound: round, updated: iso(now) }, day(now), `review round ${round}`))
+    await updateWorkflow($, context.paths, workflow.slug, current =>
+      withLog({ ...current, reviewRound: round, updated: iso(now) }, day(now), `review round ${round}`),
+    )
     $.ui.log(`workflow ${workflow.slug}: review round ${round} of ${MAX_REVIEW_ROUNDS} ended.`)
     await refreshStatus($)
   } catch (error) {

@@ -21,6 +21,7 @@ const WORKFLOW: Workflow = {
   keepDocs: 'specs',
   models: { ...DEFAULT_PLAN, build: { model: 'haiku', effort: 'low' }, review: { model: 'sonnet', effort: 'xhigh' } },
   paths: ['src/auth', 'src/api'],
+  lanes: [],
   session: 's1',
   updated: '2026-10-22T10:00:00.000Z',
   goal: 'Users sign in with email and password.',
@@ -34,6 +35,12 @@ const WORKFLOW: Workflow = {
 describe('the state file', () => {
   test('round-trips through its markdown form', () => {
     expect(parseWorkflow(renderWorkflow(WORKFLOW))).toEqual(WORKFLOW)
+  })
+
+  test('round-trips a goal of five lines', () => {
+    const goal = ['Problem: Users cannot sign in.', 'Result: Users sign in.', 'Success: A session.', 'Limits: No new dependency.', 'Out of scope: not stated'].join('\n')
+
+    expect(parseWorkflow(renderWorkflow({ ...WORKFLOW, goal })).goal).toBe(goal)
   })
 
   test('reads as plain markdown with frontmatter', () => {
@@ -74,6 +81,32 @@ describe('the state file', () => {
 
   test('refuses an unknown keep_docs', () => {
     expect(() => parseWorkflow(stateText({ keep_docs: 'some' }))).toThrow('keep_docs')
+  })
+
+  test('round-trips its lanes, each on a branch and in a worktree named after the feature ones', () => {
+    const lanes = [
+      { slice: 3, branch: 'feat/login-s3', worktree: '/repo-s3', verified: false },
+      { slice: 5, branch: 'feat/login-s5', worktree: '/repo-s5', verified: true },
+    ]
+
+    expect(parseWorkflow(renderWorkflow({ ...WORKFLOW, lanes })).lanes).toEqual(lanes)
+  })
+
+  test('writes the lanes as one lanes line', () => {
+    const lanes = [
+      { slice: 3, branch: 'feat/login-s3', worktree: '/repo-s3', verified: false },
+      { slice: 5, branch: 'feat/login-s5', worktree: '/repo-s5', verified: true },
+    ]
+
+    expect(renderWorkflow({ ...WORKFLOW, lanes })).toContain('\nlanes: [3 building, 5 verified]\n')
+  })
+
+  test('a file without a lanes line has no lanes', () => {
+    expect(parseWorkflow(stateText()).lanes).toEqual([])
+  })
+
+  test('refuses a lanes entry it cannot read', () => {
+    expect(() => parseWorkflow(stateText({ lanes: '[3 maybe]' }))).toThrow('lanes')
   })
 
   test('refuses a file with an unknown phase', () => {

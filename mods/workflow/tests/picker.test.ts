@@ -7,7 +7,7 @@ import { GATE, MODELS } from '../src/labels'
 import { withPick } from '../src/picker'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow } from '../src/state'
-import { STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { CONTINUE, INTAKE_POINTS, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
@@ -45,7 +45,7 @@ function optionsOf(found: { props: Record<string, unknown> } | undefined): Optio
 async function choosingAtIntake($: Engine, fake: Fake): Promise<void> {
   fake.answers.push(GATE.continue, MODELS.perStep)
   await start($)
-  await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.', recommendations: RECOMMENDATIONS })
+  await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 }
 
 describe('the model picker panel', () => {
@@ -254,7 +254,7 @@ describe('the model picker panel', () => {
     await ui.unmount()
   })
 
-  test('Use these saves the plan, logs it, registers the agents, closes the panel and goes on with the next phase', async ($, on) => {
+  test('Use these saves the plan, logs it, registers the agents, closes the panel and fills /workflow continue without starting the phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     await choosingAtIntake($, fake)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -269,8 +269,8 @@ describe('the model picker panel', () => {
     expect(state(fake).log.some(entry => entry.includes('models changed'))).toBe(true)
     expect(agent(fake, 'build')).toMatchObject({ model: 'sonnet', effort: 'medium' })
     expect(fake.closed).toContain('workflow-models')
-    expect(fake.prompts).toHaveLength(1)
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
     await ui.unmount()
   })
 
@@ -278,7 +278,7 @@ describe('the model picker panel', () => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.answers.push(GATE.stop, MODELS.perStep)
     await start($)
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.', recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.select({ key: 'model-build', value: 'sonnet' })
 
@@ -287,11 +287,12 @@ describe('the model picker panel', () => {
 
     expect(state(fake)).toMatchObject({ phase: 'design', status: 'paused' })
     expect(state(fake).models.build.model).toBe('sonnet')
+    expect(fake.fills).toEqual([])
     expect(fake.prompts).toHaveLength(0)
     await ui.unmount()
   })
 
-  test('Cancel keeps the plan, closes the panel and goes on with the next phase', async ($, on) => {
+  test('Cancel keeps the plan, closes the panel and fills /workflow continue without starting the phase', async ($, on) => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     await choosingAtIntake($, fake)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -303,7 +304,8 @@ describe('the model picker panel', () => {
     expect(state(fake).models).toEqual(DEFAULT_PLAN)
     expect(state(fake).log.some(entry => entry.includes('models changed'))).toBe(false)
     expect(fake.closed).toContain('workflow-models')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
     await ui.unmount()
   })
 
@@ -330,7 +332,7 @@ describe('the model picker panel', () => {
     const fake = fakeEngine(on, INTAKE, 'feat/login')
     fake.answers.push(GATE.stop)
     await start($)
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Users sign in.', recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     await run($, 'models')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })

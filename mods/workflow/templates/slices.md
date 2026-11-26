@@ -1,6 +1,6 @@
 # Slices: <title>
 
-Keep this format: the workflow mod reads the `## Slice N:` headings, the `- [ ] Done` lines and the `Design:` lines.
+Keep this format: the workflow mod reads the `## Slice N:` headings, the `- [ ] Done` lines, the `Design:` lines and the `Depends on:` lines.
 
 ## Slice 1: Walking skeleton
 - [ ] Done
