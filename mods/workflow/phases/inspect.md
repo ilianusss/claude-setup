@@ -18,7 +18,7 @@ The mod follows this phase's steps itself and shows them on the workflow band: d
 4. **Choose the minors.** Once no blocker or major is left, ask which minor findings to fix in one AskUserQuestion with `multiSelect`, one option per finding (group related ones when there are more than four). Spawn `workflow:build` to fix the picked ones the same way. Write the others, and any blocker or major the user accepted in step 3, under `## Known issues` in `design.md`, one line each with its `file:line`: the pull request body takes them from there. Skip this step when there is no minor finding. With technical decisions off, the review rounds section below says what to do instead of asking.
 5. **Run every check** of the project, exactly as written.
 6. **Close.** When this prompt has a "Closing the workflow" section (a feature), follow it: it drafts the pull request, removes the documents the user chose to drop, and asks whether to commit, push and open the pull request. Without one (a project), push nothing: the retro comes next and closes the workflow.
-7. **Approve.** Call `mcp__workflow__advance`. A feature is then done, and the mod offers to remove the worktree once it is clean and pushed; a project goes on to the retro.
+7. **Approve.** Call `mcp__workflow__advance` with `produced` (the review rounds and the fixes made, and the pull request for a feature), `risks` (the known issues left, if any) and `open` (what the user still has to do). A feature is then done, and the mod offers to remove the worktree once it is clean and pushed; a project goes on to the retro.
 
 An existing test changes only with a reason the user agrees with, listed in your report.
 

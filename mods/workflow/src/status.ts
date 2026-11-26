@@ -18,8 +18,13 @@ const verified = atom({ plugin: 'workflow', key: 'verified' } as const, null, { 
 
 export const ACTIVITY_TEXT: Readonly<Record<WorkflowActivity, string>> = { working: 'working', waiting: 'waiting for you' }
 
+function lanesText(lanes: readonly number[]): string {
+  if (lanes.length === 0) return ''
+  return `: ${lanes.length === 1 ? 'slice' : 'slices'} ${lanes.join(' ')}`
+}
+
 export function phaseText(view: WorkflowBanner): string {
-  return view.slice === null ? view.phase : `${view.phase} ${view.slice.number}/${view.slice.count}`
+  return view.slice === null ? view.phase : `${view.phase} ${view.slice.number}/${view.slice.count}${lanesText(view.lanes)}`
 }
 
 export function statusText(view: WorkflowBanner, now: WorkflowActivity): string {
@@ -65,9 +70,21 @@ export async function turnEnded($: EngineInterface): Promise<void> {
   await clearVerified($)
 }
 
+// A workflow that commits builds its slices in lanes: it counts the slices done instead of naming the current one.
+function isInLanes(workflow: Workflow): boolean {
+  return workflow.phase === 'build' && workflow.commits
+}
+
+async function sliceCount($: EngineInterface, context: Context, workflow: Workflow): Promise<{ number: number; count: number }> {
+  const slices = await readSlices($, context, workflow)
+  const number = isInLanes(workflow) ? slices.filter(slice => slice.done).length : workflow.slice
+  return { number, count: slices.length }
+}
+
 export async function phaseLabel($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
   if (workflow.phase !== 'build') return workflow.phase
-  return `build ${workflow.slice}/${(await readSlices($, context, workflow)).length}`
+  const { number, count } = await sliceCount($, context, workflow)
+  return `build ${number}/${count}${lanesText(isInLanes(workflow) ? workflow.lanes.map(lane => lane.slice) : [])}`
 }
 
 async function buildStep($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
@@ -82,6 +99,7 @@ async function buildStep($: EngineInterface, context: Context, workflow: Workflo
 }
 
 async function subStep($: EngineInterface, context: Context, workflow: Workflow): Promise<WorkflowBanner['step']> {
+  if (isInLanes(workflow)) return null
   if (workflow.phase === 'build') return { name: await buildStep($, context, workflow) }
   if (workflow.phase === 'inspect') return { name: reviewStep(workflow) }
   if (workflow.step === undefined || workflow.phase === 'done') return null
@@ -106,9 +124,10 @@ async function bannerOf($: EngineInterface, context: Context, workflow: Workflow
     slug: workflow.slug,
     phases: pipelineOf(context, workflow),
     phase: workflow.phase,
-    slice: isBuilding ? { number: workflow.slice, count: (await readSlices($, context, workflow)).length } : null,
+    slice: isBuilding ? await sliceCount($, context, workflow) : null,
     step: await subStep($, context, workflow),
     runner: runnerOf(workflow),
+    lanes: isInLanes(workflow) ? workflow.lanes.map(lane => lane.slice) : [],
   }
 }
 

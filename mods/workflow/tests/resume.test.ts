@@ -68,7 +68,7 @@ describe('/workflow continue', () => {
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(fake.prompts[0]).toEqual(expect.stringMatching(/step 2 of 4[^\n]*restate/i))
+    expect(fake.prompts[0]).toEqual(expect.stringMatching(/step 2 of 5[^\n]*listen/i))
   })
 
   test('without a saved sub-step names no step to resume at', async ($, on) => {
@@ -78,7 +78,7 @@ describe('/workflow continue', () => {
     await run($, 'continue')
     await fake.clock.settle()
 
-    expect(fake.prompts[0]).not.toEqual(expect.stringMatching(/step \d+ of 4/i))
+    expect(fake.prompts[0]).not.toContain('Where to resume')
   })
 
   test('says when there is no workflow to continue', async ($, on) => {

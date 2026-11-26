@@ -6,13 +6,13 @@ import { day, iso } from './clock'
 import type { Context } from './context'
 import { ENDING } from './labels'
 import { forgetRecommendations } from './picker'
-import { refuse } from './refusal'
-import { findRepo, git, isDefaultBranch, lines, relativeTo } from './repo'
+import { describe, refuse } from './refusal'
+import { deleteMergedBranch, findRepo, git, isClean, isDefaultBranch, isMergedInto, lines, relativeTo, removeWorktree } from './repo'
 import type { Repo } from './repo'
 import type { Runtime } from './runtime'
 import { withLog } from './state'
-import type { Workflow } from './state'
-import { deleteWorkflow, saveWorkflow } from './store'
+import type { Lane, Workflow } from './state'
+import { deleteWorkflow, updateWorkflow } from './store'
 
 // ExitWorktree only leaves a worktree this session entered with EnterWorktree, and $.session.root() cannot tell: it
 // follows a worktree move as well as a session started there.
@@ -120,9 +120,11 @@ async function remove(
     const reason = `git could not remove the worktree ${worktree}: ${removed.stderr.trim()}`
     return { removed: false, reason, text: `Removed nothing: ${reason}. The branch ${branch} is kept.` }
   }
-  const logged = withLog({ ...workflow, updated: iso(now) }, day(now), 'worktree removed')
   const kept = await deleteBranch($, main, branch)
-  await saveWorkflow($, context.repo, context.paths, kept === undefined ? withLog(logged, day(now), `branch ${branch} deleted`) : logged)
+  await updateWorkflow($, context.paths, workflow.slug, current => {
+    const logged = withLog({ ...current, updated: iso(now) }, day(now), 'worktree removed')
+    return kept === undefined ? withLog(logged, day(now), `branch ${branch} deleted`) : logged
+  })
   return {
     removed: true,
     text:
@@ -132,12 +134,54 @@ async function remove(
   }
 }
 
+async function laneProblem($: EngineInterface, cwd: string, workflow: Workflow, lane: Lane): Promise<string | undefined> {
+  if (!lane.worktree.startsWith('/') || lane.branch.startsWith('-')) return 'the state names a worktree or a branch the mod does not pass to git'
+  if (!(await isMergedInto($, cwd, lane.branch, workflow.branch))) return `${lane.branch} is not merged into ${workflow.branch}`
+  if ((await $.fs.exists(lane.worktree)) && !(await isClean($, lane.worktree))) return 'uncommitted changes'
+  return undefined
+}
+
+async function removeLane($: EngineInterface, cwd: string, lane: Lane): Promise<string | undefined> {
+  if (await $.fs.exists(lane.worktree)) {
+    const failed = await removeWorktree($, cwd, lane.worktree)
+    if (failed !== undefined) return failed
+  }
+  return deleteMergedBranch($, cwd, lane.branch)
+}
+
+// A lane left when a workflow ends goes when it is clean and the workflow branch holds its branch; any other stays for
+// the user. `git branch -d` checks the branch against HEAD, so it runs in the workflow's worktree while it exists.
+export async function removeLanes($: EngineInterface, context: Context, workflow: Workflow, now: number): Promise<string> {
+  if (workflow.lanes.length === 0) return ''
+  const cwd = (await $.fs.exists(workflow.worktree)) ? workflow.worktree : (mainCheckout(context.repo) ?? context.repo.root)
+  const removed: number[] = []
+  const kept: string[] = []
+  for (const lane of workflow.lanes) {
+    let problem: string | undefined
+    try {
+      problem = (await laneProblem($, cwd, workflow, lane)) ?? (await removeLane($, cwd, lane))
+    } catch (error) {
+      problem = describe(error)
+    }
+    if (problem === undefined) removed.push(lane.slice)
+    else kept.push(`${lane.worktree} (${problem})`)
+  }
+  if (removed.length > 0) {
+    await updateWorkflow($, context.paths, workflow.slug, current =>
+      withLog({ ...current, lanes: current.lanes.filter(lane => !removed.includes(lane.slice)), updated: iso(now) }, day(now), `lanes removed: ${removed.join(', ')}`),
+    )
+  }
+  const gone = workflow.lanes.filter(lane => removed.includes(lane.slice)).map(lane => `Removed the lane worktree ${lane.worktree} and its branch ${lane.branch}.`)
+  const left = kept.length === 0 ? [] : [`Kept the lanes ${kept.join(', ')}: remove them by hand once you no longer need them.`]
+  return [...gone, ...left].join(' ')
+}
+
 // Deleting the record takes the state, the test lock, the run log and what the mod remembers of the workflow; the
 // committed files and the branch are git's.
 export async function forget($: EngineInterface, context: Context, workflow: Workflow): Promise<void> {
   const main = mainCheckout(context.repo)
   const roots = [context.repo.root, workflow.worktree, ...(main === undefined ? [] : [main])]
-  await deleteWorkflow($, context.paths, workflow.slug, roots)
+  await deleteWorkflow($, context.paths, workflow, roots)
   await forgetRecommendations($, workflow.slug)
 }
 
@@ -159,6 +203,9 @@ function startedInside(workflow: Workflow, main: string): string {
 // question cancels it and nothing asks again later.
 export type Purpose = 'close' | 'delete'
 
+// `beforeRemoval` runs once the user agreed and before the mod removes the worktree: what needs it, such as `git branch
+// -d` checking a lane against the workflow branch, goes there.
+
 export type Ending =
   | { kind: 'said'; text: string }
   | { kind: 'blocked'; reason: string; text: string }
@@ -172,6 +219,7 @@ export async function offerEnding(
   workflow: Workflow,
   now: number,
   purpose: Purpose = 'close',
+  beforeRemoval: () => Promise<void> = async () => undefined,
 ): Promise<Ending> {
   const { worktree, branch } = workflow
   const later = purpose === 'close' ? ` ${againLater(workflow)}` : ''
@@ -193,6 +241,7 @@ export async function offerEnding(
   const toplevel = await sessionTopLevel($)
   if (toplevel === undefined) return blocked(UNRESOLVED_SESSION)
   if (relativeTo(worktree, toplevel) === undefined) {
+    await beforeRemoval()
     const removal = await remove($, context, workflow, { main, named: ignored }, now)
     return removal.removed ? { kind: 'said', text: removal.text } : blocked(removal.reason, removal.text)
   }

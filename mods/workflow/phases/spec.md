@@ -9,12 +9,12 @@ Goal: a one-page `spec.md` the user agrees describes the product: the problem, f
 
 Call `mcp__workflow__progress` with a step's number when you start each numbered step below, so the workflow band shows where the user is.
 
-1. **Restate** the idea in three to five lines and ask whether that is it.
+1. **Restate** the idea in three to five lines, one per line in the `preview` of the confirm option of an AskUserQuestion, and ask whether that is it. Never restate it only in the text before the dialog: the dialog hides that text.
 2. **Ask** in batches of at most four questions with AskUserQuestion, using `guides/product-questions.md`. Offer options with a recommended one where you can. Never fill a gap with a guess: what stays unanswered goes in Open questions.
 3. **Draft.** Spawn `workflow:spec` with the answers so far. It writes `spec.md` and returns its open questions: ask them in the next batch, then spawn it again with the answers.
 4. **Show** the user what changed since their last look, from the agent's report.
 5. **Hand off** with `mcp__workflow__handoff` after each batch of answers, so a new session can pick up.
-6. **Approval.** When no open question is left and the user agrees, call `mcp__workflow__advance` with a five-line summary.
+6. **Approval.** When no open question is left and the user agrees, call `mcp__workflow__advance` with `produced` (the spec and what it settles, one line each), `decisions` (the product decisions taken) and `open` (what stays open, if anything).
 
 Rules:
 

@@ -5,6 +5,7 @@ import { registerBanner } from '../src/banner'
 import { registerCommand, registerCommands } from '../src/commands'
 import { loadContext } from '../src/context'
 import { registerGuards } from '../src/guards'
+import { registerLanes } from '../src/lanes'
 import { registerPicker } from '../src/picker'
 import { newRuntime } from '../src/runtime'
 import { announce, refreshStatus } from '../src/status'
@@ -16,6 +17,7 @@ export const register: Register = on => {
   registerCommands(on, runtime)
   registerToolHandlers(on, runtime)
   registerGuards(on)
+  registerLanes(on)
   registerPicker(on)
   registerBanner(on)
 

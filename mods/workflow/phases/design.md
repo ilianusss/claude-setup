@@ -15,7 +15,7 @@ Call `mcp__workflow__progress` with a step's number when you start each numbered
 4. **Options.** Spawn `workflow:design` with the answers to propose two or three real options with a trade-off table against the drivers and a recommendation (`guides/decision-guide.md`). Put them to the user in AskUserQuestion, the recommended one first. The user chooses.
 5. **Write.** Spawn `workflow:design` with the choice to write `design.md` and the ADRs, then relay what it wrote.
 6. **Paths.** Call `mcp__workflow__handoff` with `paths`: the folders this design touches, from the agent's report. The drift check watches them when the workflow resumes after a break.
-7. **Approval.** When the user approves, call `mcp__workflow__advance` with the decision and the main risks.
+7. **Approval.** When the user approves, call `mcp__workflow__advance` with `produced` (`design.md` and the ADRs), `decisions` (the option chosen and why, one line each) and `risks` (the main risks).
 
 ## Agent
 

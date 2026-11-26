@@ -14,6 +14,7 @@ export type Config = {
   testLevel: string | undefined
   specsDir: string
   packages: PackageConfig[]
+  worktreeSetup: string | undefined
 }
 
 const COMMAND_NAMES = ['test', 'testFiles', 'lint', 'typecheck', 'format', 'e2e'] as const
@@ -68,6 +69,8 @@ export function parseConfig(text: string): { config: Config } | { errors: string
   const testConfig = readGlobs(raw.testConfig, 'testConfig', errors)
   const specsDir = typeof raw.specsDir === 'string' ? raw.specsDir : DEFAULT_SPECS_DIR
   const testLevel = typeof raw.testLevel === 'string' ? raw.testLevel : undefined
+  if (raw.worktreeSetup !== undefined && typeof raw.worktreeSetup !== 'string') errors.push('worktreeSetup must be a string')
+  const worktreeSetup = typeof raw.worktreeSetup === 'string' ? raw.worktreeSetup : undefined
 
   const packages: PackageConfig[] = []
   if (raw.packages !== undefined && !Array.isArray(raw.packages)) errors.push('packages must be a list')
@@ -85,5 +88,5 @@ export function parseConfig(text: string): { config: Config } | { errors: string
   }
 
   if (errors.length > 0 || commands.test === undefined) return { errors }
-  return { config: { testGlobs, testConfig, commands: { ...commands, test: commands.test }, testLevel, specsDir, packages } }
+  return { config: { testGlobs, testConfig, commands: { ...commands, test: commands.test }, testLevel, specsDir, packages, worktreeSetup } }
 }

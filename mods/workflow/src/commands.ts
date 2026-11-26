@@ -7,7 +7,8 @@ import { clearThenSubmit, day, iso, submitLater } from './clock'
 import { DEFAULT_SPECS_DIR, isOpen, loadContext, readSlices } from './context'
 import type { Context } from './context'
 import { age, driftFacts } from './drift'
-import { forget, offerEnding } from './ending'
+import { forget, offerEnding, removeLanes } from './ending'
+import { mergeWaitingLanes } from './lanes'
 import { ADOPT, BRANCH, CHAINING, COMMITS, DELETE, DOCS, PROMPTING, SIZE, SWITCH, TECHNICAL } from './labels'
 import { chooseModels, recommendationsFor } from './picker'
 import { DEFAULT_PLAN, renderPlan } from './plan'
@@ -19,7 +20,7 @@ import { parseSlices } from './slices'
 import { slugify, withLog } from './state'
 import type { KeepDocs, Phase, Prompting, Size, Workflow } from './state'
 import { announcePhase, phaseLabel, refreshStatus } from './status'
-import { isPlainSlug, openWorkflowsEverywhere, saveWorkflow } from './store'
+import { isPlainSlug, openWorkflowsEverywhere, saveWorkflow, updateWorkflow } from './store'
 import { registerToolsOnce } from './tools'
 
 const RECENT_MS = 30 * 60_000
@@ -144,6 +145,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     keepDocs,
     models: DEFAULT_PLAN,
     paths: [],
+    lanes: [],
     session: await $.session.id(),
     updated: iso(now),
     goal: title,
@@ -153,7 +155,7 @@ async function start($: EngineInterface, session: Session, title: string): Promi
     questions: [],
     log: [`${day(now)} created (${size})`],
   }
-  await saveWorkflow($, context.repo, context.paths, workflow)
+  await saveWorkflow($, context.paths, workflow)
   await registerToolsOnce($, runtime)
   announcePhase($, workflow)
   const fresh = (await loadContext($)) ?? context
@@ -202,16 +204,23 @@ async function resume($: EngineInterface, session: Session, slug: string | undef
     target.session !== sessionId && now - Date.parse(target.updated) < RECENT_MS
       ? ` Another session worked on it ${Math.round((now - Date.parse(target.updated)) / 60_000)} minutes ago: make sure it has stopped.`
       : ''
+  const merges = await mergeWaitingLanes($, context, target)
   const drift = await driftFacts($, context, target, now)
   let slice = target.slice
   if (target.phase === 'build' && slice === 0) {
     slice = (await readSlices($, context, target)).find(candidate => !candidate.done)?.number ?? 1
   }
-  const resumed: Workflow = { ...target, status: 'active', session: sessionId, slice, updated: iso(now) }
-  await saveWorkflow($, context.repo, context.paths, resumed)
+  const resumed = await updateWorkflow($, context.paths, target.slug, current => ({
+    ...current,
+    status: 'active',
+    session: sessionId,
+    slice,
+    updated: iso(now),
+  }))
   await refreshStatus($)
   await registerAgents($)
-  const prompt = await phasePrompt($, context, resumed, drift)
+  const phase = await phasePrompt($, context, resumed, drift)
+  const prompt = merges === undefined ? phase : `${merges}\n\n${phase}`
   if (clearFirst) clearThenSubmit($, prompt)
   else submitLater($, prompt)
   const action = clearFirst ? 'clearing the context, then continuing' : 'continuing'
@@ -230,7 +239,7 @@ async function models($: EngineInterface, { context }: Session): Promise<string>
 
 async function pause($: EngineInterface, { context, now }: Session, slug: string | undefined): Promise<string> {
   const target = pick(context, slug)
-  await saveWorkflow($, context.repo, context.paths, withLog({ ...target, status: 'paused', updated: iso(now) }, day(now), 'paused'))
+  await updateWorkflow($, context.paths, target.slug, current => withLog({ ...current, status: 'paused', updated: iso(now) }, day(now), 'paused'))
   await refreshStatus($)
   submitLater($, pausePrompt(target))
   return `pausing "${target.slug}". Claude writes the handoff, then stops.`
@@ -250,23 +259,38 @@ async function remove($: EngineInterface, session: Session, slug: string | undef
   if (!isPlainSlug(target.slug)) return `cannot delete "${target.slug}": its name is not a plain file name. Delete ${context.paths.dir}/${target.slug}.md by hand.`
   const confirmed = await askOrUndefined($, DELETE.question(target.slug, target.status), [DELETE.yes, DELETE.no], 'Delete')
   if (confirmed !== DELETE.yes) return 'cancelled, nothing changed.'
-  const ending = await offerEnding($, runtime, context, target, now, 'delete')
+  // The lanes go only once the delete is accepted, so a cancel leaves everything as it was, and before the workflow's
+  // worktree goes, since `git branch -d` checks a lane against it.
+  let lanes: string | undefined
+  const removeTheLanes = async () => {
+    lanes ??= await removeLanes($, context, target, now)
+  }
+  const withLanes = async (text: string) => {
+    await removeTheLanes()
+    return lanes === undefined || lanes === '' ? text : `${lanes} ${text}`
+  }
+  const ending = await offerEnding($, runtime, context, target, now, 'delete', removeTheLanes)
   if (ending.kind === 'cancelled') return notDeleted(target)
   if (ending.kind === 'leave') {
+    const said = await withLanes(`Claude leaves the worktree and removes it, then the mod deletes "${target.slug}".`)
     submitLater($, ending.prompt)
-    return `Claude leaves the worktree and removes it, then the mod deletes "${target.slug}".`
+    return said
   }
   if (ending.kind === 'blocked') {
     const anyway = await askOrUndefined($, DELETE.blocked(target.worktree, ending.reason), [DELETE.anyway, DELETE.cancel], 'Delete')
     if (anyway !== DELETE.anyway) return notDeleted(target, ending.reason)
+    const said = await withLanes(
+      `Deleted the workflow "${target.slug}", and kept the worktree ${target.worktree} and the branch ${target.branch}: remove them by hand when you no longer need them.`,
+    )
     await forget($, context, target)
     await refreshStatus($)
-    return `Deleted the workflow "${target.slug}", and kept the worktree ${target.worktree} and the branch ${target.branch}: remove them by hand when you no longer need them.`
+    return said
   }
+  const deleted = `Deleted the workflow "${target.slug}".`
+  const said = await withLanes(ending.text === '' ? deleted : `${ending.text} ${deleted}`)
   await forget($, context, target)
   await refreshStatus($)
-  const deleted = `Deleted the workflow "${target.slug}".`
-  return ending.text === '' ? deleted : `${ending.text} ${deleted}`
+  return said
 }
 
 function byThePerson(origin: PromptOrigin): boolean {
@@ -324,6 +348,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       keepDocs: 'all',
       models: DEFAULT_PLAN,
       paths: [],
+      lanes: [],
       session: await $.session.id(),
       updated: iso(now),
       goal: '',
@@ -333,7 +358,7 @@ async function adopt($: EngineInterface, session: Session): Promise<string> {
       questions: [],
       log: [`${day(now)} rebuilt by adopt`],
     }
-    await saveWorkflow($, context.repo, context.paths, workflow)
+    await saveWorkflow($, context.paths, workflow)
     report.push(`rebuilt ${slug} (${phase}${phase === 'build' ? `, slice ${slice}` : ''}, on ${context.repo.branch})`)
   }
   if (report.length > 0) {

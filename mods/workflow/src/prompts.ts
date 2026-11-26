@@ -8,14 +8,30 @@ import { STEP_SOURCES, readPhase, stepOf, stepsOf } from './phases'
 import type { PhaseDoc } from './phases'
 import { DEFAULT_PLAN, describeChoice } from './plan'
 import type { Step } from './plan'
-import { sections } from './slices'
-import { MAX_REVIEW_ROUNDS, reviewRoundOf } from './state'
+import { describe } from './refusal'
+import { readySlices, sections, waves } from './slices'
+import type { Slice } from './slices'
+import { MAX_LANES, MAX_REVIEW_ROUNDS, reviewRoundOf } from './state'
+import { runningSlices } from './running'
+import { buildsInLanes } from './store'
+import { buildTask } from './tasks'
 import type { Workflow } from './state'
 
-// $.agent.register defines an agent type the Agent tool dispatches from the next turn on, so a step agent registered
-// again in this turn would run its old definition (the old slice, the old model) if spawned before the turn ends.
-export const NEXT_IN_ITS_OWN_TURN =
-  'The step agents were registered again in this turn, and the Agent tool spawns them as registered only from the next turn on: the mod sends you what comes next in a message of its own.'
+const CONTINUE_COMMAND = '/workflow continue'
+
+export async function fillContinue($: EngineInterface): Promise<boolean> {
+  try {
+    return (await $.prompt.fill({ text: CONTINUE_COMMAND })).isFilled
+  } catch (error) {
+    $.ui.log(`workflow: ${CONTINUE_COMMAND} could not be put in the prompt box: ${describe(error)}`, { to: 'debug' })
+    return false
+  }
+}
+
+export function endWithContinue(starts: string, isFilled: boolean): string {
+  const where = isFilled ? 'it is already in their prompt box, they press Enter' : 'the mod could not put it in their prompt box, so they type it'
+  return `End your turn now, with a line starting "Next:" that tells the user to run \`${CONTINUE_COMMAND}\` to ${starts} (${where}). Never say the user has nothing to do.`
+}
 
 function bulletOr(items: readonly string[], none: string): string {
   return items.length > 0 ? items.join('; ') : none
@@ -43,32 +59,35 @@ function files($: EngineInterface, specs: string): string {
   ].join('\n')
 }
 
+export function greenChecks(config: Config | undefined): string {
+  const commands = config === undefined ? [] : [config.commands.lint, config.commands.typecheck, config.commands.test]
+  const green = commands.filter((command): command is string => command !== undefined).map(command => `\`${command}\``)
+  return green.length > 0 ? green.join(', ') : "the project's lint, typecheck and full test suite"
+}
+
 function checks(config: Config | undefined): string | undefined {
   if (config === undefined) return undefined
   const sliceTests = config.commands.testFiles ?? config.commands.test
   const red = sliceTests.includes('{files}')
     ? `run \`${sliceTests}\` with this slice's test files in place of \`{files}\`, sorted and separated by spaces`
     : `run \`${sliceTests}\``
-  const green = [config.commands.lint, config.commands.typecheck, config.commands.test].filter(
-    (command): command is string => command !== undefined,
-  )
   return [
     '## Checks',
     '',
     `- Red: ${red}, exactly as written with nothing appended, then call mcp__workflow__lock.`,
-    `- Green: once the slice tests pass, run ${green.map(command => `\`${command}\``).join(', ')} exactly as written, then call mcp__workflow__verify.`,
+    `- Green: once the slice tests pass, run ${greenChecks(config)} exactly as written, then call mcp__workflow__verify.`,
     ...(config.packages.length > 0 ? ['- A file inside a package uses that package\'s commands from `.claude/workflow.json`; lock names them.'] : []),
   ].join('\n')
 }
 
-function missingSlice(workflow: Workflow): string {
-  return `## Slice ${workflow.slice}\n\n\`slices.md\` has no slice ${workflow.slice}. Tell the user, and stop.`
+function missingSlice(number: number): string {
+  return `## Slice ${number}\n\n\`slices.md\` has no slice ${number}. Tell the user, and stop.`
 }
 
-async function currentSlice($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
+export async function sliceSections($: EngineInterface, context: Context, workflow: Workflow, number: number): Promise<string> {
   const slices = await readSlices($, context, workflow)
-  const slice = slices.find(candidate => candidate.number === workflow.slice)
-  if (slice === undefined) return missingSlice(workflow)
+  const slice = slices.find(candidate => candidate.number === number)
+  if (slice === undefined) return missingSlice(number)
   const design = (await readDoc($, context, workflow, 'design.md')) ?? ''
   const needed = sections(design, slice.designSections)
   return [
@@ -85,16 +104,16 @@ async function currentSlice($: EngineInterface, context: Context, workflow: Work
 async function sliceNamed($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
   const slices = await readSlices($, context, workflow)
   const slice = slices.find(candidate => candidate.number === workflow.slice)
-  if (slice === undefined) return missingSlice(workflow)
+  if (slice === undefined) return missingSlice(workflow.slice)
   return [
     '## This slice',
     '',
-    `Slice ${slice.number}: ${slice.name} (${slice.number} of ${slices.length}). The build agent holds its text, its design sections and the checks.`,
+    `Slice ${slice.number}: ${slice.name} (${slice.number} of ${slices.length}). The build agent holds the checks, and the mod adds the slice's text and design sections to its prompt when you spawn it.`,
   ].join('\n')
 }
 
 function header(workflow: Workflow): string[] {
-  const slice = workflow.phase === 'build' ? `, slice ${workflow.slice}` : ''
+  const slice = workflow.phase === 'build' && !workflow.commits ? `, slice ${workflow.slice}` : ''
   return [
     `# Workflow: ${workflow.title}`,
     `You are working on the workflow \`${workflow.slug}\` (${workflow.size}), phase ${workflow.phase}${slice}, on branch \`${workflow.branch}\`. The workflow mod keeps its state: change it only through the mcp__workflow__* tools. Commits after each slice: ${workflow.commits ? 'yes' : 'no, the user commits'}.`,
@@ -157,7 +176,54 @@ function whatTheUserIsAsked($: EngineInterface, workflow: Workflow): string {
 
 export function spawnBuild(workflow: Workflow): string {
   const { model, effort } = workflow.models.build
-  return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "Build slice ${workflow.slice} of \`${workflow.slug}\`." It runs on ${model} with ${effort} effort and already holds the slice, the design sections and the checks. Wait for it, then relay its report to the user: what it built, each check and its result, whether mcp__workflow__verify closed the slice, and its open questions.`
+  return `Spawn \`workflow:build\` with the Agent tool to build slice ${workflow.slice}, in the foreground, with the prompt "${buildTask(workflow.slug, workflow.slice)}" It runs on ${model} with ${effort} effort and holds the checks; the mod adds the slice and its design sections to its prompt. Wait for it, then relay its report to the user: what it built, each check and its result, whether mcp__workflow__verify closed the slice, and its open questions.`
+}
+
+export function spawnLanes(workflow: Workflow, tasks: readonly string[]): string {
+  const { model, effort } = workflow.models.build
+  return [
+    `Spawn ${tasks.length === 1 ? 'this' : 'these'} in one message, each with the Agent tool as \`workflow:build\` in the background (\`run_in_background: true\`), on ${model} with ${effort} effort, each with exactly this prompt:`,
+    '',
+    ...tasks.map(task => `- "${task}"`),
+    '',
+    'The mod sends each into its own worktree and branch, with its slice. Then end your turn, telling the user that the slices build in parallel and that the mod reports each as it ends: nothing is needed from them unless a question comes up. Relay each report as it comes.',
+  ].join('\n')
+}
+
+// Each lane left without an agent goes on, then each ready slice starts while lanes are free. A verified lane needs no
+// agent: it waits for the mod to merge it.
+export function laneTasks(workflow: Workflow, slices: readonly Slice[], running: readonly number[]): string[] {
+  const resumed = workflow.lanes.filter(lane => !lane.verified && !running.includes(lane.slice)).map(lane => buildTask(workflow.slug, lane.slice))
+  const free = Math.max(MAX_LANES - workflow.lanes.length, 0)
+  const ready = readySlices(slices, workflow.lanes.map(lane => lane.slice), free).map(slice => buildTask(workflow.slug, slice.number))
+  return [...resumed, ...ready]
+}
+
+// No lane runs and no slice can start: the build waits on slices.md, which the user has to see fixed.
+export function stuckReason(slices: readonly Slice[]): string {
+  const graph = waves(slices)
+  const done = new Set(slices.filter(slice => slice.done).map(slice => slice.number))
+  const problems =
+    'errors' in graph
+      ? graph.errors
+      : slices.filter(slice => !slice.done).map(slice => `slice ${slice.number} waits for slice ${slice.dependsOn.filter(dependency => !done.has(dependency)).join(', ')}`)
+  return `No slice can start and no lane runs: ${problems.join('; ')}. Tell the user and fix slices.md with them, or spawn \`workflow:slice\` to fix it; then \`/workflow continue\` starts the ready slices.`
+}
+
+async function buildLanes($: EngineInterface, context: Context, workflow: Workflow): Promise<string> {
+  const slices = await readSlices($, context, workflow)
+  const tasks = laneTasks(workflow, slices, await runningSlices($, workflow.slug))
+  return [
+    '## The build agents',
+    '',
+    `This workflow commits, so its slices build in parallel, at most ${MAX_LANES} at a time, each in its own git worktree and branch made from \`${workflow.branch}\`. Once a lane's agent verified its slice and its run ended, the mod merges the lane into \`${workflow.branch}\`, ticks the slice and sends you the next step in a message of its own.`,
+    '',
+    tasks.length > 0
+      ? spawnLanes(workflow, tasks)
+      : workflow.lanes.length > 0
+        ? 'No slice can start now: wait for the running lanes, the mod reports each as it ends.'
+        : stuckReason(slices),
+  ].join('\n')
 }
 
 function buildAgent(workflow: Workflow): string {
@@ -237,23 +303,43 @@ function closing(context: Context, workflow: Workflow): string | undefined {
     `2. **Remove documents.** ${removal(workflow, specs)}`,
     `3. **Ask what to publish** in one AskUserQuestion, always asked whatever the settings, your recommended option first: "${PUBLISH.all}", "${PUBLISH.push}", "${PUBLISH.commit}", "${PUBLISH.nothing}". Leave out the parts already done: the commit when \`git status --porcelain\` is empty, the push when the branch has an upstream with nothing to push, the pull request when \`gh pr view\` finds one. Show the draft with the question.`,
     `4. **Publish what they chose:** commit what is uncommitted, the document removal included, with \`following-git-conventions\`; push with \`git push -u origin ${workflow.branch}\`; open the pull request with \`gh pr create\` and the draft, and give the user its link.`,
-    '5. **Approve.** Call `mcp__workflow__advance`. The mod then offers to remove the worktree and the local branch, only when nothing is uncommitted and the branch is pushed.',
+    '5. **Approve.** Call `mcp__workflow__advance` with `produced` (what was published: the commit, the push, the pull request and its link) and `open` (anything left for the user). The mod then offers to remove the worktree and the local branch, only when nothing is uncommitted and the branch is pushed.',
   ].join('\n')
 }
 
-function fixing(config: Config | undefined): string {
-  const commands = config === undefined ? [] : [config.commands.lint, config.commands.typecheck, config.commands.test]
-  const checks = commands.filter((command): command is string => command !== undefined).map(command => `\`${command}\``)
-  return [
+// Review findings in inspect, and a check that fails in the workflow's worktree after a lane merged: both are fixed
+// test-first without the slice lock.
+type Fixing = 'review' | 'integration'
+
+const FIXING_INTRO: Readonly<Record<Fixing, string[]>> = {
+  review: [
     '## Fixing review findings',
     '',
     'The workflow is in its inspect phase: your prompt names review findings to fix, not a slice. Leave out the lock and verify steps above: mcp__workflow__lock and mcp__workflow__verify belong to the build phase and are refused here, so the discipline is yours.',
     '',
     '1. For each finding, write the failing test that shows it first (a bug found in review gets its failing test before its fix), run it and read the failure: it must fail for the reason the finding names.',
+  ],
+  integration: [
+    '## Fixing the integration',
+    '',
+    "Your prompt names checks that fail in the workflow's worktree after the mod merged a slice, not a slice to build. You work in that worktree, without a lane: leave out the lock and verify steps above, since mcp__workflow__lock and mcp__workflow__verify belong to the lanes and are refused here, so the discipline is yours. The tests the merged slices locked stay as written: when one of them has to change, stop and put it in your open questions, and the conversation asks the user with mcp__workflow__unlock here; the mod refuses the next merge while a locked line is gone without that unlock.",
+    '',
+    '1. For each failure, find the failing test that shows it, or write one first when the failure is not a test (a behaviour two slices broke together), run it and read the failure: it must fail for the reason the check named.',
+  ],
+}
+
+function fixing(config: Config | undefined, kind: Fixing): string {
+  return [
+    ...FIXING_INTRO[kind],
     '2. Fix it with the smallest change, and run the test again.',
-    `3. Run every check, exactly as written, with nothing appended, until each passes: ${checks.length > 0 ? checks.join(', ') : "the project's lint, typecheck and full test suite"}.`,
+    `3. Run every check, exactly as written, with nothing appended, until each passes: ${greenChecks(config)}.`,
     '4. Report each finding with the test that covers it, and each check with its result. An existing test changes only with a reason the user agrees with: stop and put it in your open questions.',
+    ...(kind === 'integration' ? ['5. Commit the fix on the workflow branch, following the following-git-conventions skill: the next merge needs a clean worktree.'] : []),
   ].join('\n')
+}
+
+export function integrationFix(config: Config | undefined): string {
+  return fixing(config, 'integration')
 }
 
 function agentPart(workflow: Workflow, step: Step | undefined): string | undefined {
@@ -269,7 +355,8 @@ function leading(context: Context, workflow: Workflow): string | undefined {
     '',
     `- Open the phase by telling the user where they are: step ${phases.indexOf(workflow.phase) + 1} of ${phases.length} of this workflow (${phases.join(', ')}), what this phase produces (${PRODUCES[workflow.phase]}), and what they will be asked in it.`,
     '- Ask every decision the user owns with AskUserQuestion, your recommended option first with "(Recommended)" after its label. Never leave a decision as an open question in chat.',
-    '- End every turn with a line starting "Next:" that says what happens next and whether the user has to act.',
+    '- Anything the user needs to read to answer a question goes inside the AskUserQuestion dialog itself, in the question text or in an option\'s `preview` (markdown, one line per point), never only in the text before the dialog: the dialog hides that text.',
+    '- End every turn with a line starting "Next:" that says what happens next and whether the user has to act. When the user has to type a command, the Next: line names it.',
   ].join('\n')
 }
 
@@ -312,6 +399,7 @@ export async function phasePrompt(
   const doc = await readPhase($, workflow.phase)
   const step = doc.agents.Agent === undefined ? undefined : stepOf(workflow.phase)
   const isBuilding = workflow.phase === 'build'
+  const inLanes = isBuilding && (await buildsInLanes($, context.paths, workflow))
   return joined([
     ...header(workflow),
     leading(context, workflow),
@@ -321,12 +409,12 @@ export async function phasePrompt(
     doc.body,
     workflow.phase === 'intake' ? defaultModels(context, workflow) : undefined,
     mapAgent(workflow),
-    agentPart(workflow, step),
+    inLanes ? await buildLanes($, context, workflow) : agentPart(workflow, step),
     reviewRounds(workflow),
     closing(context, workflow),
     standing(workflow),
     files($, specsFolder(context, workflow)),
-    isBuilding ? await sliceNamed($, context, workflow) : undefined,
+    isBuilding && !inLanes ? await sliceNamed($, context, workflow) : undefined,
   ])
 }
 
@@ -345,9 +433,8 @@ export async function agentInstructions(
     ...header(workflow),
     section,
     whatTheUserIsAsked($, workflow),
-    isFixing ? fixing(context.config) : undefined,
+    isFixing ? fixing(context.config, 'review') : undefined,
     files($, specsFolder(context, workflow)),
-    isBuilding ? await currentSlice($, context, workflow) : undefined,
     isBuilding ? checks(context.config) : undefined,
   ])
 }

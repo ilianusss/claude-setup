@@ -103,7 +103,7 @@ async function enterWorktree($: Engine): Promise<void> {
 }
 
 async function approveLastGate($: Engine): Promise<string> {
-  return text(await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Pull request opened.' }))
+  return text(await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Pull request opened.'] }))
 }
 
 async function finish($: Engine, agentId?: string): Promise<{ deny?: string; result?: unknown }> {

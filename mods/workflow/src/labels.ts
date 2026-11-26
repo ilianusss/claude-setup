@@ -45,6 +45,13 @@ export const NEXT_SLICE = {
   stop: 'Stop here',
 }
 
+export const NEXT_SLICES = {
+  question: (slug: string, ready: readonly number[]) =>
+    `${ready.length === 1 ? `Slice ${ready.join('')} of "${slug}" is` : `Slices ${ready.join(', ')} of "${slug}" are`} ready. Start ${ready.length === 1 ? 'it' : 'them'} now, in parallel, each in its own worktree?`,
+  start: 'Start them',
+  stop: 'Stop here',
+}
+
 export const BRANCH = {
   create: (branch: string) => `Create ${branch}`,
   stay: (branch: string) => `Stay on ${branch}`,
@@ -82,6 +89,9 @@ export const GATE = {
   continue: 'Continue',
   stop: 'Stop here',
   wait: 'Not yet',
+  question: (phase: Phase, slug: string, target: Phase) => `Approve the ${phase} phase of "${slug}" and move to ${target}?`,
+  sections: { produced: 'Produced:', decisions: 'Decisions:', risks: 'Risks:', open: 'Open questions:' },
+  points: { problem: 'Problem:', result: 'Result:', success: 'Success:', limits: 'Limits:', outOfScope: 'Out of scope:' },
   notAsked: (phase: Phase) => `Technical decisions are off, so the user was not asked at the ${phase} gate: the workflow moved on as if they chose Continue.`,
 }
 // The options Claude offers in the closing's publish question; each drops the parts already done.

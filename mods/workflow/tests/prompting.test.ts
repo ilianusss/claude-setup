@@ -6,12 +6,11 @@ import { ADOPT, BRANCH, CHAINING, COMMITS, DELETE, DOCS, GATE, MODELS, PROMPTING
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow, renderWorkflow } from '../src/state'
 import type { Phase } from '../src/state'
-import { CONFIG, ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { CONFIG, CONTINUE, INTAKE_POINTS, ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
 const WITH_CONFIG = { [`${ROOT}/.claude/workflow.json`]: JSON.stringify(CONFIG) }
-const SUMMARY = 'Users sign in with email and password.'
 const RECOMMENDATIONS = [{ step: 'build', model: 'sonnet', effort: 'high', reason: 'The slices are small and well specified.' }]
 const PHASE_SECTION = '## What to ask the user'
 const AGENT_SECTION = '## What the user is asked'
@@ -126,7 +125,7 @@ describe('the gates with technical decisions off', () => {
       const fake = fakeEngine(on, files, 'feat/login')
       await start($)
 
-      const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Done.' }))
+      const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Done.'] }))
       await fake.clock.settle()
 
       expect(fake.questions).toEqual([])
@@ -134,7 +133,8 @@ describe('the gates with technical decisions off', () => {
       expect(state(fake).status).toBe('active')
       expect(state(fake).log.at(-1)).toContain(`${phase} approved without asking (technical decisions are off)`)
       expect(ran).toContain(GATE.notAsked(phase))
-      expect(fake.prompts).toHaveLength(1)
+      expect(fake.fills).toEqual([CONTINUE])
+      expect(fake.prompts).toHaveLength(0)
     })
   }
 
@@ -142,7 +142,7 @@ describe('the gates with technical decisions off', () => {
     const fake = fakeEngine(on, inPhase('inspect', { technical: 'no', worktree: ROOT }), 'feat/login')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Pull request opened.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Pull request opened.'] })
 
     expect(fake.questions).toEqual([])
     expect(state(fake)).toMatchObject({ phase: 'done', status: 'done' })
@@ -152,7 +152,7 @@ describe('the gates with technical decisions off', () => {
     const fake = fakeEngine(on, inPhase('spec', { size: 'project', technical: 'no' }), 'feat/login')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'The spec.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['The spec.'] })
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake).phase).toBe('spec')
@@ -162,7 +162,7 @@ describe('the gates with technical decisions off', () => {
     const fake = fakeEngine(on, inPhase('retro', { size: 'project', technical: 'no', worktree: ROOT }), 'feat/login')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Two changes.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Two changes.'] })
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake).phase).toBe('retro')
@@ -172,7 +172,7 @@ describe('the gates with technical decisions off', () => {
     const fake = fakeEngine(on, inPhase('design', { prompting: 'major' }), 'feat/login')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake).phase).toBe('design')
@@ -185,7 +185,7 @@ describe("the intake's gate with technical decisions off", () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS }))
+    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS }))
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake).models).toEqual({ ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' } })
@@ -197,7 +197,7 @@ describe("the intake's gate with technical decisions off", () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY }))
+    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS }))
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake).models).toEqual(DEFAULT_PLAN)
@@ -209,7 +209,7 @@ describe("the intake's gate with technical decisions off", () => {
     fake.answers.push(GATE.stop)
     await start($)
 
-    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS }))
+    const ran = text(await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS }))
 
     expect(fake.questions).toHaveLength(1)
     expect(state(fake)).toMatchObject({ status: 'paused', models: { ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' } } })

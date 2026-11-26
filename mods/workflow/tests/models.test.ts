@@ -4,13 +4,12 @@ import { describe, expect, test } from 'claude-code/testing'
 import { GATE, MODELS } from '../src/labels'
 import { DEFAULT_PLAN } from '../src/plan'
 import { parseWorkflow } from '../src/state'
-import { ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
+import { CONTINUE, INTAKE_POINTS, ROOT, STATE_DIR, buildRepo, fakeEngine, run, start, stateText } from './engine'
 import type { Fake } from './engine'
 
 const STATE_FILE = `${STATE_DIR}/login.md`
 const INTAKE = buildRepo({ [STATE_FILE]: stateText({ phase: 'intake', slice: '0' }) })
 const DESIGN = buildRepo({ [STATE_FILE]: stateText({ phase: 'design', slice: '0', models: '[build sonnet low]' }) })
-const SUMMARY = 'Users sign in with email and password.'
 const RECOMMENDATIONS = [
   { step: 'build', model: 'sonnet', effort: 'high', reason: 'The slices are small and well specified.' },
   { step: 'review', model: 'opus', effort: 'xhigh', reason: 'Auth code: a subtle flaw would cost the most.' },
@@ -53,7 +52,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(fake.questions[1]).toBe(
       'Which models should the steps use?\n\n' +
@@ -68,7 +67,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(fake.questions[1]).toBe(
       'Which models should the steps use?\n\nDefaults: map on sonnet medium; design, slice, review on opus high; build on opus medium.',
@@ -81,7 +80,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(fake.questions[1]).toContain('Defaults: setup on sonnet medium; spec, design, slice, review on opus high; build on opus medium.')
   })
@@ -93,7 +92,7 @@ describe('the model question at the intake gate', () => {
 
     await $.tool.call({
       tool: 'mcp__workflow__advance',
-      summary: SUMMARY,
+      ...INTAKE_POINTS,
       recommendations: [{ step: 'design', model: 'opus', effort: 'high', reason: 'Two options to weigh.' }, RECOMMENDATIONS[0]],
     })
 
@@ -107,7 +106,7 @@ describe('the model question at the intake gate', () => {
 
     await $.tool.call({
       tool: 'mcp__workflow__advance',
-      summary: SUMMARY,
+      ...INTAKE_POINTS,
       recommendations: [{ step: 'build', model: 'opus', effort: 'medium', reason: 'The usual slices.' }],
     })
 
@@ -120,7 +119,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(offered[1]).toEqual(['Use the defaults', 'Choose per step'])
   })
@@ -130,7 +129,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.stop, MODELS.recommended)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(fake.questions[1]).toMatch(/^Which models should the steps use\?/)
     expect(state(fake)).toMatchObject({
@@ -146,7 +145,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.stop, MODELS.perStep)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(fake.opened[0]).toMatchObject({ id: PANE })
     expect(text(ran)).toContain('Models panel')
@@ -159,7 +158,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.' })
+    await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'] })
 
     expect(fake.questions).toHaveLength(1)
   })
@@ -169,14 +168,15 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.defaults)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(true)
     expect(agent(fake, 'build')).toMatchObject({ model: 'opus', effort: 'medium' })
     await fake.clock.settle()
     expect(text(ran)).not.toContain('Do the design work.')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
   })
 
   test("Use Claude's recommendations saves them over the defaults, logs it and registers the agents on them", async ($, on) => {
@@ -184,7 +184,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue, MODELS.recommended)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake).models).toEqual({ ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' }, review: { model: 'opus', effort: 'xhigh' } })
     expect(hasModelsLog(fake)).toBe(true)
@@ -192,7 +192,8 @@ describe('the model question at the intake gate', () => {
     expect(agent(fake, 'review')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     await fake.clock.settle()
     expect(text(ran)).not.toContain('Do the design work.')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
   })
 
   test('a dismissed model question keeps the plan and goes on with the next phase', async ($, on) => {
@@ -200,13 +201,14 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.continue)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(false)
     await fake.clock.settle()
     expect(text(ran)).not.toContain('Do the design work.')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
   })
 
   test('Not yet keeps the phase and the plan', async ($, on) => {
@@ -214,7 +216,7 @@ describe('the model question at the intake gate', () => {
     fake.answers.push(GATE.wait)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake)).toMatchObject({ phase: 'intake', models: DEFAULT_PLAN })
     expect(fake.questions).toHaveLength(1)
@@ -228,7 +230,7 @@ describe('recommendations the gate refuses', () => {
     await start($)
     const before = fake.files.get(STATE_FILE)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: 'Option B.', recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', produced: ['Option B.'], recommendations: RECOMMENDATIONS })
 
     expect(ran.deny).toContain('intake')
     expect(fake.questions).toHaveLength(0)
@@ -250,7 +252,7 @@ describe('recommendations the gate refuses', () => {
       await start($)
       const before = fake.files.get(STATE_FILE)
 
-      const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations })
+      const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations })
 
       expect(ran.deny).toContain(entry)
       expect(fake.questions).toHaveLength(0)
@@ -264,7 +266,7 @@ describe('recommendations the gate refuses', () => {
     await start($)
     const before = fake.files.get(STATE_FILE)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: 'build opus xhigh' })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: 'build opus xhigh' })
 
     expect(ran.deny).toContain('recommendations')
     expect(fake.files.get(STATE_FILE)).toBe(before)
@@ -280,7 +282,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     const steps = fake.questions.slice(2)
     expect(steps).toHaveLength(5)
@@ -295,7 +297,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(offered[3]).toEqual(['opus high (Recommended)', 'opus medium', 'opus xhigh'])
     expect(offered[5]).toEqual(['sonnet high (Recommended)', 'opus medium (default)', 'sonnet medium'])
@@ -309,7 +311,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(offered.flat().filter(label => /fable|max/i.test(label))).toEqual([])
   })
@@ -320,14 +322,15 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, ...ALL_RECOMMENDED)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake).models).toEqual({ ...DEFAULT_PLAN, build: { model: 'sonnet', effort: 'high' }, review: { model: 'opus', effort: 'xhigh' } })
     expect(hasModelsLog(fake)).toBe(true)
     expect(agent(fake, 'review')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     await fake.clock.settle()
     expect(text(ran)).not.toContain('Do the design work.')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
   })
 
   test('takes a model and effort typed under Other', async ($, on) => {
@@ -336,7 +339,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, 'Haiku  Low', 'opus high (Recommended)', 'opus high (Recommended)', 'sonnet low', 'opus high')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(state(fake).models).toMatchObject({ map: { model: 'haiku', effort: 'low' }, build: { model: 'sonnet', effort: 'low' } })
   })
@@ -347,7 +350,7 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, 'fable high', 'opus max', 'gpt-5 high', 'haiku low', 'opus high', 'opus high', 'opus medium', 'opus high')
     await start($)
 
-    await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY })
+    await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS })
 
     expect(fake.questions.slice(2, 6).every(question => question.includes('the map step'))).toBe(true)
     expect(fake.questions[3]).toContain('fable high')
@@ -360,13 +363,14 @@ describe('the choice per step when the panel cannot be shown', () => {
     fake.answers.push(GATE.continue, MODELS.perStep, 'haiku low', 'sonnet high')
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
 
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(hasModelsLog(fake)).toBe(false)
     await fake.clock.settle()
     expect(text(ran)).not.toContain('Do the design work.')
-    expect(fake.prompts[0]).toContain('Do the design work.')
+    expect(fake.fills).toEqual([CONTINUE])
+    expect(fake.prompts).toHaveLength(0)
   })
 })
 
@@ -376,13 +380,16 @@ describe('the choice per step in the panel', () => {
     fake.answers.push(GATE.continue, MODELS.perStep)
     await start($)
 
-    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', summary: SUMMARY, recommendations: RECOMMENDATIONS })
+    const ran = await $.tool.call({ tool: 'mcp__workflow__advance', ...INTAKE_POINTS, recommendations: RECOMMENDATIONS })
     await fake.clock.settle()
 
     expect(fake.opened[0]).toMatchObject({ id: PANE, focus: true, closeOnEscape: true, holdToasts: true })
     expect(state(fake)).toMatchObject({ phase: 'design', models: DEFAULT_PLAN })
     expect(text(ran)).toContain('Models panel')
+    expect(text(ran)).toContain('`/workflow continue` to start the design phase')
+    expect(text(ran)).toContain('Never say the user has nothing to do')
     expect(text(ran)).not.toContain('Do the design work.')
+    expect(fake.fills).toEqual([])
     expect(fake.prompts).toHaveLength(0)
   })
 })

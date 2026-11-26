@@ -43,6 +43,12 @@ describe('the closing section', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
 
+  test('approves with what it produced, so the gate has the one line it needs', async ($, on) => {
+    const closing = closingOf(await promptOf($, on, { phase: 'inspect' }))
+
+    expect(closing).toContain('`mcp__workflow__advance` with `produced`')
+  })
+
   test('offers each way to publish, and says the commit, push and pull request parts drop out once done', async ($, on) => {
     const closing = closingOf(await promptOf($, on, { phase: 'inspect' }))
 

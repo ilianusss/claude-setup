@@ -8,6 +8,9 @@ export type Lock = {
   sliceFiles: string[]
   unlocked: string[]
   updated: string
+  // A lane's lock only: each workflow-locked test as it stood when the lane's first lock seeded from the workflow lock,
+  // the common base a later merge of the workflow branch into the lane is checked against.
+  bases?: Record<string, string>
 }
 
 export type Run = { command: string; exitCode: number; tree: string; at: string }
